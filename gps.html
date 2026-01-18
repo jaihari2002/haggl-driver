@@ -512,8 +512,8 @@
                         markersRef.current.accuracyCircle = L.circle([driverLocation.lat, driverLocation.lng], {
                             color: '#F59E0B',
                             fillColor: '#F59E0B',
-                            fillOpacity: 0.15,
-                            weight: 1,
+                            fillOpacity: 0.3,
+                            weight: 2,
                             dashArray: '4, 4',
                             radius: driverAccuracy
                         }).addTo(map);
@@ -535,11 +535,17 @@
                                 L.latLng(routeStart.lat, routeStart.lng),
                                 L.latLng(routeEnd.lat, routeEnd.lng)
                             ],
-                            lineOptions: { styles: [{ color: '#6366f1', opacity: 0.8, weight: 6 }] },
+                            router: new L.Routing.OSRMv1({
+                                serviceUrl: 'https://router.project-osrm.org/route/v1',
+                                profile: 'driving'
+                            }),
+                            lineOptions: {
+                                styles: [{ color: '#3b82f6', opacity: 1, weight: 7 }]
+                            },
                             createMarker: () => null,
                             addWaypoints: false,
                             show: false,
-                            fitSelectedRoutes: false // Disable auto-fit so we can control it manually below
+                            fitSelectedRoutes: false // We handle fitting manually for better control
                         })
                             .on('routesfound', function (e) {
                                 const routes = e.routes;
@@ -591,9 +597,15 @@
                         // Fallback view logic merged here for cleaner flow
                         if (!driverLocation) map.setView([targetLat, targetLng], 14);
                     }
+                } else {
+                    // IMMEDIATE FIT: When routing starts, don't wait for API. Fit to start/end points immediately.
+                    // This fixes "no immediate routing" visual lag.
+                    const bounds = L.latLngBounds([
+                        [routeStart.lat, routeStart.lng],
+                        [routeEnd.lat, routeEnd.lng]
+                    ]);
+                    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16, animate: true });
                 }
-                // IF isRouting == true: Do nothing here. The 'routesfound' callback above will handle the camera.
-                // This prevents the map from "jumping" to the driver location and then to the route.
             }, [targetLat, targetLng, radius, targetType, driverLocation, driverAccuracy, routeStart, routeEnd]);
 
             return <div ref={mapRef} id={mapId} className={className || "w-full h-full"}></div>;
