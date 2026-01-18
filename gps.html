@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Haggl - Logistics Brokerage</title>
 
     <!-- Tailwind CSS -->
@@ -37,6 +38,8 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+            touch-action: pan-y;
         }
 
         /* Custom animations */
@@ -405,7 +408,8 @@
 
         // --- MAP COMPONENT ---
         // --- MAP COMPONENT ---
-        const MapComponent = ({ targetLat, targetLng, radius, targetType = 'default', driverLocation, driverAccuracy, routeStart, routeEnd, onRouteFound, className, id, interactive = true }) => {
+        // --- MAP COMPONENT ---
+        const MapComponent = ({ targetLat, targetLng, radius, targetType = 'default', driverLocation, driverAccuracy, routeStart, routeEnd, onRouteFound, className, id, interactive = true, onRoutingStart, onRoutingSuccess, onRoutingError }) => {
             const mapRef = useRef(null);
             const mapInstanceRef = useRef(null);
             const markersRef = useRef({ target: null, driver: null, accuracyCircle: null });
@@ -524,12 +528,14 @@
                 if (routeStart && routeEnd && routeStart.lat && routeEnd.lat) {
                     if (routingControlRef.current) {
                         // UPDATE existing control to avoid performance hit and errors
+                        if (onRoutingStart) onRoutingStart(); // Signal start
                         routingControlRef.current.setWaypoints([
                             L.latLng(routeStart.lat, routeStart.lng),
                             L.latLng(routeEnd.lat, routeEnd.lng)
                         ]);
                     } else {
                         // CREATE new control
+                        if (onRoutingStart) onRoutingStart(); // Signal start
                         routingControlRef.current = L.Routing.control({
                             waypoints: [
                                 L.latLng(routeStart.lat, routeStart.lng),
@@ -562,7 +568,12 @@
                                         maxZoom: 16,
                                         animate: true
                                     });
+                                    if (onRoutingSuccess) onRoutingSuccess();
                                 }
+                            })
+                            .on('routingerror', function (e) {
+                                console.warn("Routing Error", e);
+                                if (onRoutingError) onRoutingError();
                             })
                             .addTo(map);
                     }
@@ -787,6 +798,10 @@
             const [showSuccessPopup, setShowSuccessPopup] = useState(false);
             const [successPopupColor, setSuccessPopupColor] = useState("green");
 
+            // Routing Loading State
+            const [isRouteLoading, setIsRouteLoading] = useState(false);
+            const [routeError, setRouteError] = useState(false);
+
             // Alert State
             const [showLocationAlert, setShowLocationAlert] = useState(false);
             const [locationAlertMessage, setLocationAlertMessage] = useState("");
@@ -944,18 +959,19 @@
                             <div className="relative w-full flex justify-center mt-12 mb-6 shrink-0">
                                 <div className="relative w-[260px] h-[260px]">
                                     {/* SVG Ring */}
-                                    <svg height="260" width="260" className="absolute inset-0 rotate-[-90deg] z-10 pointer-events-none">
+                                    <svg height="260" width="260" className={`absolute inset-0 z-10 pointer-events-none ${isRouteLoading ? 'animate-spin' : '-rotate-90'}`}>
                                         <circle stroke="#333" strokeWidth={stroke} fill="transparent" r={normalizedRadius} cx="130" cy="130" />
                                         <circle
-                                            stroke="#3b82f6"
+                                            stroke={isRouteLoading ? '#ef4444' : '#3b82f6'}
                                             strokeWidth={stroke}
-                                            strokeDasharray={circumference + ' ' + circumference}
-                                            style={{ strokeDashoffset, transition: 'stroke-dashoffset 1s linear' }}
+                                            strokeDasharray={isRouteLoading ? ((circumference * 0.7) + ' ' + circumference) : (circumference + ' ' + circumference)}
+                                            strokeDashoffset={0}
                                             strokeLinecap="round"
                                             fill="transparent"
                                             r={normalizedRadius}
                                             cx="130"
                                             cy="130"
+                                            style={{ transition: 'all 0.5s ease' }}
                                         />
                                     </svg>
 
@@ -974,10 +990,25 @@
                                             routeEnd={isOrderValid ? pickup : null}
                                             onRouteFound={onRouteFound}
                                             interactive={false}
+                                            onRoutingStart={() => { setIsRouteLoading(true); setRouteError(false); }}
+                                            onRoutingSuccess={() => setIsRouteLoading(false)}
+                                            onRoutingError={() => { setIsRouteLoading(false); setRouteError(true); }}
                                         />
                                         {!isOrderValid && (
                                             <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                                                 <p className="text-xs font-bold text-gray-400">Waiting for Order...</p>
+                                            </div>
+                                        )}
+                                        {isOrderValid && isRouteLoading && (
+                                            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10">
+                                                <Icons.Loader2 className="animate-spin text-blue-500 mb-2" size={32} />
+                                                <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Mapping Route...</p>
+                                            </div>
+                                        )}
+                                        {isOrderValid && routeError && (
+                                            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10">
+                                                <Icons.WifiOff className="text-red-500 mb-2" size={32} />
+                                                <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest">Route Failed</p>
                                             </div>
                                         )}
                                     </div>
