@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haggl - Logistics Brokerage</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <!-- Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap"
+        rel="stylesheet">
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Leaflet Routing Machine JS -->
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Custom animations */
+        @keyframes fade-in-up {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slide-in-right {
+            from {
+                transform: translateX(100%);
+            }
+
+            to {
+                transform: translateX(0);
+            }
+        }
+
+        .animate-in {
+            animation: fade-in-up 0.5s ease-out;
+        }
+
+        .slide-in {
+            animation: slide-in-right 0.3s ease-out;
+        }
+
+        /* Map Container */
+        #map-container {
+            height: 100%;
+            width: 100%;
+            z-index: 0;
+            background-color: #e2e8f0;
+        }
+
+        /* Hide Leaflet Routing Container */
+        .leaflet-routing-container {
+            display: none !important;
+        }
+
+        .custom-div-icon {
+            background: transparent;
+            border: none;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 antialiased overflow-hidden">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const BRAND_COLOR = "#FFCC00";
+
+        // --- ICONS ---
+        const Icons = {
+            MapPin: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></svg>,
+            Settings: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>,
+            SearchCode: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m13 13.5 2-2.5-2-2.5" /><path d="m21 21-4.3-4.3" /><path d="M9 8.5 7 11l2 2.5" /><circle cx="11" cy="11" r="8" /></svg>,
+            Loader2: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>,
+            Package: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m7.5 4.27 9 5.15" /><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22v-9" /></svg>,
+            Truck: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 17h4V5H2v12h3" /><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5" /><path d="M14 17h1" /><circle cx="7.5" cy="17.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" /></svg>,
+            Navigation: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="3 11 22 2 13 21 11 13 3 11" /></svg>,
+            Menu: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="4" x2="20" y1="12" y2="12" /><line x1="4" x2="20" y1="6" y2="6" /><line x1="4" x2="20" y1="18" y2="18" /></svg>,
+            X: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18" /><path d="m6 6 18 18" /></svg>,
+            Crosshair: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><line x1="22" y1="12" x2="18" y2="12" /><line x1="6" y1="12" x2="2" y2="12" /><line x1="12" y1="6" x2="12" y2="2" /><line x1="12" y1="22" x2="12" y2="18" /></svg>,
+            WifiOff: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 2 22 22" /><path d="M8.5 8.5A6 6 0 0 1 19 12" /><path d="M5 12a10 10 0 0 1 15.828-5.828" /><path d="M12 20a14 14 0 0 1-9.9-4.1" /></svg>,
+            RefreshCcw: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" /></svg>,
+            Phone: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>,
+            AlertTriangle: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>,
+            CheckCircle: ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+        };
+
+        // --- UTILS ---
+        const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+            if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
+            const R = 6371; // km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return (R * c) * 1000;
+        };
+        const AddressForm = ({ type, data, onChange, onCoordsUpdate }) => {
+            const [isLoadingPin, setIsLoadingPin] = useState(false);
+            const [isLoadingGeo, setIsLoadingGeo] = useState(false);
+            const [geoError, setGeoError] = useState('');
+            const [localities, setLocalities] = useState([]);
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                onChange({ ...data, [name]: value });
+            };
+
+            const handleManualCoords = (e) => {
+                const val = e.target.value;
+                onChange({ ...data, manualCoords: val });
+            };
+
+            const handlePincodeSearch = async () => {
+                if (data.pincode.length !== 6) return;
+                setIsLoadingPin(true);
+                setLocalities([]); // Clear previous
+                try {
+                    const res = await fetch(`https://api.postalpincode.in/pincode/${data.pincode}`);
+                    const json = await res.json();
+                    if (json && json[0].Status === "Success") {
+                        const poList = json[0].PostOffice;
+                        const main = poList[0];
+
+                        // Populate Locality Dropdown
+                        const locs = poList.map(po => po.Name);
+                        setLocalities(locs);
+
+                        onChange({
+                            ...data,
+                            district: main.District,
+                            state: main.State,
+                            block: main.Block !== "NA" ? main.Block : main.Taluk || main.Division,
+                            locality: locs.length > 0 ? locs[0] : ''
+                        });
+                    } else {
+                        setGeoError("Invalid Pincode");
+                    }
+                } catch (e) { console.error(e); setGeoError("API Error"); }
+                setIsLoadingPin(false);
+            };
+
+            const handleGeocode = async () => {
+                setIsLoadingGeo(true);
+                setGeoError('');
+
+                // 1. PRIORITY: Check Manual GPS Coordinates first
+                if (data.manualCoords && data.manualCoords.trim()) {
+                    const parts = data.manualCoords.split(',').map(s => s.trim());
+                    if (parts.length === 2) {
+                        const lat = parseFloat(parts[0]);
+                        const lng = parseFloat(parts[1]);
+
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            // If valid coordinates, use them immediately
+                            onCoordsUpdate(lat, lng);
+                            setIsLoadingGeo(false);
+                            return;
+                        } else {
+                            setGeoError('Invalid format. Use: 9.768, 78.068');
+                            setIsLoadingGeo(false);
+                            return;
+                        }
+                    }
+                }
+
+                // 2. FALLBACK: Geocode based on Address fields
+                // Construct query from 4 main fields
+                const queryParts = [
+                    data.locality,
+                    data.block,
+                    data.district,
+                    data.state,
+                    'India'
+                ].filter(Boolean);
+
+                const query = queryParts.join(', ');
+
+                if (!query) {
+                    setGeoError('Please enter details or coordinates');
+                    setIsLoadingGeo(false);
+                    return;
+                }
+
+                try {
+                    // Using Nominatim for Geocoding.
+                    // Note: This often returns 403 Forbidden if run from file:// protocol due to missing User-Agent/Referer.
+                    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+                    // Attempt to fetch
+                    const res = await fetch(url);
+
+                    if (!res.ok) {
+                        // Handle 403 (Forbidden) or 429 (Rate Limit) specifically
+                        if (res.status === 403 || res.status === 429) {
+                            throw new Error('BLOCKED');
+                        }
+                        throw new Error('NETWORK');
+                    }
+
+                    const json = await res.json();
+
+                    if (json && json.length > 0) {
+                        const lat = parseFloat(json[0].lat);
+                        const lng = parseFloat(json[0].lon);
+                        onCoordsUpdate(lat, lng);
+                    } else {
+                        setGeoError('Address not found. Try entering GPS manually.');
+                    }
+                } catch (e) {
+                    console.warn("Geocoding API failed, trying offline fallback...", e);
+
+                    // --- WOW FACTOR: Offline Fallback for Demo ---
+                    const lowerQuery = query.toLowerCase();
+                    let fallbackCoords = null;
+
+                    const offlineDB = {
+                        'madurai': { lat: 9.9252, lng: 78.1198 },
+                        'chennai': { lat: 13.0827, lng: 80.2707 },
+                        'bangalore': { lat: 12.9716, lng: 77.5946 },
+                        'bengaluru': { lat: 12.9716, lng: 77.5946 },
+                        'coimbatore': { lat: 11.0168, lng: 76.9558 },
+                        'delhi': { lat: 28.7041, lng: 77.1025 },
+                        'mumbai': { lat: 19.0760, lng: 72.8777 },
+                        'tvs nagar': { lat: 9.942, lng: 78.106 } // Specific fix for user's query
+                    };
+
+                    // Simple fuzzy search
+                    for (const [key, coords] of Object.entries(offlineDB)) {
+                        if (lowerQuery.includes(key)) {
+                            fallbackCoords = coords;
+                            break;
+                        }
+                    }
+
+                    if (fallbackCoords) {
+                        onCoordsUpdate(fallbackCoords.lat, fallbackCoords.lng);
+                        setGeoError('Offline Mode: Used approximate location (API Blocked)');
+                    } else {
+                        if (e.message === 'BLOCKED') {
+                            setGeoError('API Blocked. Please Use "GPS Coordinates" field below.');
+                        } else {
+                            setGeoError('Network error. Suggest using "GPS Coordinates" manually.');
+                        }
+                    }
+                }
+                setIsLoadingGeo(false);
+            };
+
+            return (
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className={`p-1.5 rounded-lg ${type === 'pickup' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
+                            {type === 'pickup' ? <Icons.Package size={16} /> : <Icons.MapPin size={16} />}
+                        </div>
+                        <h3 className="font-bold text-gray-700 uppercase text-xs tracking-wider">{type} Details</h3>
+                        {data.lat && <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">Coordinates Set</span>}
+                    </div>
+
+                    <div className="space-y-3">
+                        {/* Pincode Search Row */}
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Pincode (Search)</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text" name="pincode" value={data.pincode} onChange={handleChange}
+                                    placeholder="600001" maxLength="6"
+                                    className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#FFCC00] outline-none font-mono"
+                                />
+                                <button
+                                    onClick={handlePincodeSearch}
+                                    disabled={data.pincode.length !== 6 || isLoadingPin}
+                                    className="bg-slate-100 px-3 rounded-lg hover:bg-slate-200 transition-colors text-slate-600"
+                                >
+                                    {isLoadingPin ? <Icons.Loader2 className="animate-spin" /> : <Icons.SearchCode />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Locality Dropdown */}
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Locality / Area</label>
+                            <select
+                                name="locality"
+                                value={data.locality}
+                                onChange={handleChange}
+                                className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#FFCC00] outline-none"
+                            >
+                                <option value="">Select Area</option>
+                                {localities.map((loc, idx) => (
+                                    <option key={idx} value={loc}>{loc}</option>
+                                ))}
+                                {localities.length === 0 && data.locality && <option value={data.locality}>{data.locality}</option>}
+                            </select>
+                        </div>
+
+                        {/* Block & District */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Taluk / Block</label>
+                                <input type="text" name="block" value={data.block} onChange={handleChange} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">District</label>
+                                <input type="text" name="district" value={data.district} onChange={handleChange} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" />
+                            </div>
+                        </div>
+
+                        {/* State */}
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">State</label>
+                            <input type="text" name="state" value={data.state} onChange={handleChange} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" />
+                        </div>
+
+                        {/* Manual GPS Coordinates */}
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                                <Icons.Crosshair size={10} />
+                                GPS Coordinates (Optional)
+                            </label>
+                            <input
+                                type="text"
+                                name="manualCoords"
+                                value={data.manualCoords || ''}
+                                onChange={handleManualCoords}
+                                placeholder="eg: 9.768, 78.068"
+                                className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-600 outline-none focus:border-[#FFCC00]"
+                            />
+                        </div>
+
+                        {/* Radius Slider */}
+                        <div>
+                            <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase mb-1">
+                                <span>Geofence Radius</span>
+                                <span className={`${type === 'pickup' ? 'text-amber-600' : 'text-blue-600'}`}>{data.radius} meters</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="10"
+                                max="2000"
+                                step="10"
+                                value={data.radius}
+                                onChange={(e) => onChange({ ...data, radius: parseInt(e.target.value) })}
+                                className={`w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer ${type === 'pickup' ? 'accent-amber-500' : 'accent-blue-600'}`}
+                            />
+                        </div>
+                    </div>
+
+                    {geoError && <p className="text-xs text-red-500 font-medium">{geoError}</p>}
+
+                    <button
+                        onClick={handleGeocode}
+                        disabled={isLoadingGeo || (!data.locality && !data.manualCoords)}
+                        className={`w-full py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all
+                            ${isLoadingGeo ? 'bg-gray-100 text-gray-400' : 'bg-slate-800 text-white hover:bg-slate-900'}
+                        `}
+                    >
+                        {isLoadingGeo ? <Icons.Loader2 className="animate-spin" /> : <Icons.MapPin size={14} />}
+                        {data.lat ? 'Update Coordinates' : 'Fetch Coordinates'}
+                    </button>
+
+                    {data.lat && (
+                        <p className="text-[10px] text-center text-gray-400 font-mono">
+                            {data.lat.toFixed(5)}, {data.lng.toFixed(5)}
+                        </p>
+                    )}
+                </div>
+            );
+        };
+
+        // --- MAP COMPONENT ---
+        // --- MAP COMPONENT ---
+        const MapComponent = ({ targetLat, targetLng, radius, targetType = 'default', driverLocation, driverAccuracy, routeStart, routeEnd, onRouteFound, className, id }) => {
+            const mapRef = useRef(null);
+            const mapInstanceRef = useRef(null);
+            const markersRef = useRef({ target: null, driver: null, accuracyCircle: null });
+            const circleRef = useRef(null);
+            const routingControlRef = useRef(null);
+            const mapId = id || "map-container";
+
+            useEffect(() => {
+                // Initialize Map
+                if (!mapInstanceRef.current && mapRef.current) {
+                    mapInstanceRef.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([20.5937, 78.9629], 5);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; OpenStreetMap &copy; CartoDB',
+                        subdomains: 'abcd',
+                        maxZoom: 19
+                    }).addTo(mapInstanceRef.current);
+                    setTimeout(() => mapInstanceRef.current.invalidateSize(), 500);
+                }
+
+                const map = mapInstanceRef.current;
+                if (!map) return;
+
+                // --- 1. Target Marker & Circle (Pickup or Drop - for simple viz) ---
+                if (targetLat && targetLng) {
+                    if (markersRef.current.target) map.removeLayer(markersRef.current.target);
+                    if (circleRef.current) map.removeLayer(circleRef.current);
+
+                    // Determine Colors based on Type
+                    const isPickup = targetType === 'pickup';
+                    const mainColor = isPickup ? '#22c55e' : (targetType === 'drop' ? '#ef4444' : '#6366f1'); // Green, Red, or Indigo
+                    const fillColor = isPickup ? '#4ade80' : (targetType === 'drop' ? '#f87171' : '#818cf8');
+
+                    const targetIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div style="background-color: ${mainColor}; width: 16px; height: 16px; border: 3px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"></div>`,
+                        iconSize: [16, 16], iconAnchor: [8, 8]
+                    });
+
+                    markersRef.current.target = L.marker([targetLat, targetLng], { icon: targetIcon }).addTo(map);
+
+                    // Add Geofence Circle
+                    circleRef.current = L.circle([targetLat, targetLng], {
+                        color: mainColor,
+                        fillColor: mainColor,
+                        fillOpacity: 0.15,
+                        radius: radius || 500
+                    }).addTo(map);
+                }
+
+                // --- 2. Driver Marker & Accuracy (Real Driver position) ---
+                if (driverLocation) {
+                    if (markersRef.current.driver) map.removeLayer(markersRef.current.driver);
+                    if (markersRef.current.accuracyCircle) map.removeLayer(markersRef.current.accuracyCircle);
+
+                    const driverIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div style="position:relative; width:50px; height:50px;">
+                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" style="width:100%; height:100%; filter: drop-shadow(0 5px 8px rgba(0,0,0,0.4)); transform: rotate(180deg);">
+                                    {/* Wheels */}
+                                    <rect x="10" y="20" width="12" height="24" rx="4" fill="#333" />
+                                    <rect x="78" y="20" width="12" height="24" rx="4" fill="#333" />
+                                    <rect x="10" y="65" width="12" height="24" rx="4" fill="#333" />
+                                    <rect x="78" y="65" width="12" height="24" rx="4" fill="#333" />
+                                    
+                                    {/* Chassis shadow */}
+                                    <rect x="22" y="15" width="56" height="80" rx="4" fill="rgba(0,0,0,0.2)" />
+
+                                    {/* Cargo Container (More detailed/Fun) */}
+                                    <rect x="20" y="40" width="60" height="55" rx="6" fill="#f87171" stroke="#b91c1c" strokeWidth="2" />
+                                    <path d="M20 40h60v20H20z" fill="#ef4444" />
+                                    
+                                    {/* Haggl Logo on Cargo */}
+                                    <image href="./haggl-logo.png" x="25" y="45" width="50" height="45" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
+                                    
+                                    {/* Cab */}
+                                    <path d="M22 40V20a8 8 0 0 1 8-8h40a8 8 0 0 1 8 8v20H22z" fill="#ef4444" stroke="#b91c1c" strokeWidth="2" />
+                                    
+                                    {/* Windshield & Roof */}
+                                    <path d="M28 15h44v12H28z" fill="#3b82f6" opacity="0.8" />
+                                    <path d="M30 15v-2a2 2 0 0 1 2-2h36a2 2 0 0 1 2 2v2" fill="#ef4444" />
+                                    
+                                    {/* Lights */}
+                                    <circle cx="26" cy="40" r="3" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
+                                    <circle cx="74" cy="40" r="3" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
+                                 </svg>
+                               </div>`,
+                        iconSize: [50, 50], iconAnchor: [25, 25]
+                    });
+
+                    markersRef.current.driver = L.marker([driverLocation.lat, driverLocation.lng], { icon: driverIcon }).addTo(map);
+
+                    // Add Accuracy Circle
+                    if (driverAccuracy) {
+                        markersRef.current.accuracyCircle = L.circle([driverLocation.lat, driverLocation.lng], {
+                            color: '#F59E0B',
+                            fillColor: '#F59E0B',
+                            fillOpacity: 0.15,
+                            weight: 1,
+                            dashArray: '4, 4',
+                            radius: driverAccuracy
+                        }).addTo(map);
+                    }
+                }
+
+                // --- 3. Routing (From routeStart to routeEnd) ---
+                if (routeStart && routeEnd && routeStart.lat && routeEnd.lat) {
+                    if (routingControlRef.current) {
+                        // UPDATE existing control to avoid performance hit and errors
+                        routingControlRef.current.setWaypoints([
+                            L.latLng(routeStart.lat, routeStart.lng),
+                            L.latLng(routeEnd.lat, routeEnd.lng)
+                        ]);
+                    } else {
+                        // CREATE new control
+                        routingControlRef.current = L.Routing.control({
+                            waypoints: [
+                                L.latLng(routeStart.lat, routeStart.lng),
+                                L.latLng(routeEnd.lat, routeEnd.lng)
+                            ],
+                            lineOptions: { styles: [{ color: '#6366f1', opacity: 0.8, weight: 6 }] },
+                            createMarker: () => null,
+                            addWaypoints: false,
+                            show: false,
+                            fitSelectedRoutes: false // Disable auto-fit so we can control it manually below
+                        })
+                            .on('routesfound', function (e) {
+                                const routes = e.routes;
+                                if (routes && routes.length > 0) {
+                                    const summary = routes[0].summary;
+                                    if (onRouteFound) onRouteFound(summary.totalDistance, summary.totalTime);
+
+                                    // AUTO-FIT TO ROUTE (Fix for Circular View)
+                                    // Use the entire route geometry to ensure no part of the path is cut off.
+                                    // Padding [50, 50] creates a ~160px safe zone inside the 260px circle.
+                                    // This pushes markers to the "corners" while keeping icons (25px radius) safe from clipping.
+                                    map.fitBounds(routes[0].coordinates, {
+                                        padding: [50, 50],
+                                        maxZoom: 16,
+                                        animate: true
+                                    });
+                                }
+                            })
+                            .addTo(map);
+                    }
+                } else {
+                    // Remove control if route is no longer valid
+                    if (routingControlRef.current) {
+                        try {
+                            map.removeControl(routingControlRef.current);
+                        } catch (e) {
+                            console.warn("Routing control cleanup error", e);
+                        }
+                        routingControlRef.current = null;
+                    }
+                }
+
+                // --- 4. RE-CENTER MAP (Fit Bounds) ---
+                // Only use manual fitting if we are NOT routing. 
+                // If routing is active, we rely on 'routesfound' above to fit the exact path geometry.
+                const isRouting = routeStart && routeEnd && routeStart.lat && routeEnd.lat;
+
+                if (!isRouting && driverLocation && targetLat && targetLng) {
+                    const bounds = L.latLngBounds([
+                        [driverLocation.lat, driverLocation.lng],
+                        [targetLat, targetLng]
+                    ]);
+                    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16, animate: true });
+                } else if (driverLocation) {
+                    map.panTo([driverLocation.lat, driverLocation.lng], { animate: true });
+                } else if (targetLat) {
+                    map.panTo([targetLat, targetLng], { animate: true });
+                }
+
+                // Fallback view
+                if (targetLat && targetLng && !driverLocation) {
+                    map.setView([targetLat, targetLng], 14);
+                }
+            }, [targetLat, targetLng, radius, targetType, driverLocation, driverAccuracy, routeStart, routeEnd]);
+
+            return <div ref={mapRef} id={mapId} className={className || "w-full h-full"}></div>;
+        };
+
+        // --- SUCCESS POPUP COMPONENT ---
+        const SuccessPopup = ({ isOpen, onClose, color = "green" }) => {
+            if (!isOpen) return null;
+
+            const colorClasses = {
+                green: "bg-green-500",
+                blue: "bg-blue-500",
+                red: "bg-red-500"
+            };
+            const bgClass = colorClasses[color] || "bg-green-500";
+
+            return (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in">
+                    <div className="bg-white rounded-3xl p-8 flex flex-col items-center shadow-2xl transform transition-all scale-100">
+                        <div className={`w-20 h-20 rounded-full ${bgClass} flex items-center justify-center mb-4 shadow-lg animate-bounce`}>
+                            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight">Success!</h3>
+                        <p className="text-sm text-slate-500 font-medium">Action Confirmed</p>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- SWIPE BUTTON COMPONENT ---
+        const SwipeButton = ({ onConfirm, isLoading, label = "Slide to Accept", successLabel = "Confirmed", color = "green" }) => {
+            const [dragX, setDragX] = useState(0);
+            const [isDragging, setIsDragging] = useState(false);
+            const [isConfirmed, setIsConfirmed] = useState(false);
+            const containerRef = useRef(null);
+            const btnWidth = 50; // Width of the handle (approx)
+
+            const colorClasses = {
+                green: "bg-green-500",
+                blue: "bg-blue-500",
+                red: "bg-red-500"
+            };
+            const activeColorClass = colorClasses[color] || "bg-green-500";
+            const iconColorClass = color === 'green' ? 'text-green-600' : (color === 'blue' ? 'text-blue-600' : 'text-red-600');
+
+
+            const handleStart = (e) => {
+                if (isConfirmed || isLoading) return;
+                setIsDragging(true);
+            };
+
+            const handleMove = (e) => {
+                if (!isDragging || !containerRef.current) return;
+                const containerRect = containerRef.current.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+
+                // Calculate position relative to container
+                let newX = clientX - containerRect.left - (btnWidth / 2);
+
+                // Constraints
+                const maxDrag = containerRect.width - btnWidth - 8; // 8px padding buffer
+                newX = Math.min(maxDrag, Math.max(0, newX));
+
+                setDragX(newX);
+            };
+
+            const handleEnd = () => {
+                if (!isDragging || !containerRef.current) return;
+                setIsDragging(false);
+
+                const containerWidth = containerRef.current.offsetWidth;
+                const maxDrag = containerWidth - btnWidth - 8;
+                const threshold = maxDrag * 0.9; // 90% threshold
+
+                if (dragX >= threshold) {
+                    setDragX(maxDrag);
+                    setIsConfirmed(true);
+                    if (onConfirm) onConfirm();
+                } else {
+                    setDragX(0); // Snap back
+                }
+            };
+
+            useEffect(() => {
+                const moveEvent = (e) => handleMove(e);
+                const endEvent = () => handleEnd();
+
+                if (isDragging) {
+                    window.addEventListener('mousemove', moveEvent);
+                    window.addEventListener('mouseup', endEvent);
+                    window.addEventListener('touchmove', moveEvent);
+                    window.addEventListener('touchend', endEvent);
+                }
+                return () => {
+                    window.removeEventListener('mousemove', moveEvent);
+                    window.removeEventListener('mouseup', endEvent);
+                    window.removeEventListener('touchmove', moveEvent);
+                    window.removeEventListener('touchend', endEvent);
+                };
+            }, [isDragging, dragX]);
+
+            return (
+                <div
+                    ref={containerRef}
+                    className="relative w-full h-14 bg-gray-800 rounded-full overflow-hidden select-none cursor-pointer border border-white/10 shadow-inner"
+                    onMouseDown={handleStart}
+                    onTouchStart={handleStart}
+                >
+                    {/* Background Fill */}
+                    <div
+                        className={`absolute top-0 left-0 h-full transition-all duration-75 ease-linear opacity-90 ${activeColorClass}`}
+                        style={{ width: `${dragX + btnWidth}px` }}
+                    ></div>
+
+                    {/* Text Layer */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                        <span className={`text-sm font-bold uppercase tracking-widest text-white transition-opacity duration-300 ${dragX > 50 ? 'opacity-0' : 'opacity-100'}`}>
+                            {isConfirmed ? successLabel : label}
+                        </span>
+                        <span className={`text-sm font-bold uppercase tracking-widest text-white absolute transition-opacity duration-300 ${isConfirmed ? 'opacity-100' : 'opacity-0'}`}>
+                            {successLabel}
+                        </span>
+                    </div>
+
+                    {/* Handle */}
+                    <div
+                        className="absolute top-1 bottom-1 w-12 bg-white rounded-full shadow-lg flex items-center justify-center z-20 cursor-grab active:cursor-grabbing transition-transform duration-75 ease-linear"
+                        style={{ transform: `translateX(${dragX}px)`, left: '4px' }}
+                    >
+                        {isLoading ? <Icons.Loader2 className={`animate-spin ${iconColorClass}`} size={20} /> : <Icons.Navigation className={`${iconColorClass} rotate-90`} size={20} />}
+                    </div>
+                </div>
+            )
+        };
+
+        // --- LOCATION ALERT POPUP COMPONENT ---
+        const LocationAlert = ({ isOpen, message, onClose }) => {
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    {/* Alarming Red Background */}
+                    <div className="absolute inset-0 bg-red-600/90 backdrop-blur-sm animate-pulse z-0"></div>
+
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm flex flex-col items-center shadow-2xl transform transition-all scale-100 border border-red-100 relative z-10">
+                        <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4 text-red-600 animate-bounce">
+                            <Icons.AlertTriangle size={32} />
+                        </div>
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2 text-center">One sec!</h3>
+                        <p className="text-sm text-slate-500 font-medium text-center leading-relaxed mb-6">
+                            {message}
+                        </p>
+
+                        <div className="flex flex-col gap-3 w-full">
+                            <a
+                                href="tel:9025749103"
+                                className="w-full bg-red-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20"
+                            >
+                                <Icons.Phone size={18} /> Call Support
+                            </a>
+                            <button
+                                onClick={onClose}
+                                className="w-full bg-slate-100 text-slate-700 font-bold py-3.5 rounded-xl hover:bg-slate-200 transition-colors"
+                            >
+                                I'll check again
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- DRIVER VIEW COMPONENT ---
+        const DriverView = ({ pickup, drop, driverLocation, driverAccuracy, routeStats, orderStatus, actionAttempt, onAccept, onDeny, onRouteFound, onForceRefresh, isAutoRefresh, setIsAutoRefresh, retryCountdown }) => {
+            const [maxDistance, setMaxDistance] = useState(0);
+            const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+            const [successPopupColor, setSuccessPopupColor] = useState("green");
+
+            // Alert State
+            const [showLocationAlert, setShowLocationAlert] = useState(false);
+            const [locationAlertMessage, setLocationAlertMessage] = useState("");
+
+            // Local reset for SwipeButton
+            const [localResetKey, setLocalResetKey] = useState(0);
+
+            // Helper: Haversine Distance
+            const getDist = (lat1, lon1, lat2, lon2) => {
+                const R = 6371e3; // metres
+                const φ1 = lat1 * Math.PI / 180;
+                const φ2 = lat2 * Math.PI / 180;
+                const Δφ = (lat2 - lat1) * Math.PI / 180;
+                const Δλ = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
+            };
+
+            // Set max distance on first valid route calculation
+            useEffect(() => {
+                if (routeStats.distance > 0 && maxDistance === 0) {
+                    setMaxDistance(routeStats.distance);
+                }
+            }, [routeStats.distance, maxDistance]);
+
+            // Calculate progress
+            const fraction = maxDistance > 0 ? Math.min(1, Math.max(0, routeStats.distance / maxDistance)) : 1;
+
+            // SVG Config
+            const radius = 120;
+            const stroke = 6;
+            const normalizedRadius = radius - stroke * 2;
+            const circumference = normalizedRadius * 2 * Math.PI;
+            const strokeDashoffset = circumference - (fraction * circumference);
+
+            // NEW: Check if order is valid
+            const isOrderValid = pickup.lat && drop.lat;
+
+            // Determine Button Color based on Status
+            const getButtonColor = () => {
+                if (orderStatus === 'PENDING') return 'green';
+                if (orderStatus === 'ACCEPTED') return 'blue';
+                if (orderStatus === 'IN_TRANSIT') return 'red';
+                return 'green';
+            };
+
+            const handleSwipeConfirm = () => {
+                // Validation Logic
+                if (orderStatus === 'ACCEPTED') {
+                    // Check Pickup Radius
+                    if (driverLocation && pickup.lat) {
+                        const dist = getDist(driverLocation.lat, driverLocation.lng, pickup.lat, pickup.lng);
+                        if (dist > (pickup.radius || 500)) {
+                            setLocationAlertMessage("You are not at the pickup location. Please ensure you have arrived at the correct address.");
+                            setShowLocationAlert(true);
+                            setLocalResetKey(prev => prev + 1); // RESET BUTTON
+                            return; // STOP
+                        }
+                    } else {
+                        // fallback
+                        setLocationAlertMessage("GPS signal weak. Cannot verify location.");
+                        setShowLocationAlert(true);
+                        setLocalResetKey(prev => prev + 1); // RESET BUTTON
+                        return;
+                    }
+                } else if (orderStatus === 'IN_TRANSIT') {
+                    // Check Drop Radius
+                    if (driverLocation && drop.lat) {
+                        const dist = getDist(driverLocation.lat, driverLocation.lng, drop.lat, drop.lng);
+                        if (dist > (drop.radius || 500)) {
+                            setLocationAlertMessage("You are not at the drop location. Please ensure you have arrived at the destination.");
+                            setShowLocationAlert(true);
+                            setLocalResetKey(prev => prev + 1); // RESET BUTTON
+                            return; // STOP
+                        }
+                    } else {
+                        setLocationAlertMessage("GPS signal weak. Cannot verify location.");
+                        setShowLocationAlert(true);
+                        setLocalResetKey(prev => prev + 1); // RESET BUTTON
+                        return;
+                    }
+                }
+
+                // If Valid or "Pending" (Accepting order doesn't need location check yet)
+                const color = getButtonColor();
+                setSuccessPopupColor(color);
+
+                // Determine action
+                let action = '';
+                if (orderStatus === 'PENDING') action = 'ACCEPT';
+                else if (orderStatus === 'ACCEPTED') action = 'ARRIVED_PICKUP';
+                else if (orderStatus === 'IN_TRANSIT') action = 'ARRIVED_DROP';
+
+                // Show Success Popup
+                setShowSuccessPopup(true);
+
+                // Wait for animation then proceed
+                setTimeout(() => {
+                    setShowSuccessPopup(false);
+                    onAccept(action);
+                }, 2000);
+            };
+
+            return (
+                <div className="fixed inset-0 bg-[#111] text-white z-50 flex flex-col font-sans animate-in">
+
+                    <SuccessPopup
+                        isOpen={showSuccessPopup}
+                        color={successPopupColor}
+                        onClose={() => setShowSuccessPopup(false)}
+                    />
+
+                    <LocationAlert
+                        isOpen={showLocationAlert}
+                        message={locationAlertMessage}
+                        onClose={() => setShowLocationAlert(false)}
+                    />
+
+                    {/* Top Controls */}
+                    <div className="absolute top-4 right-4 z-20">
+                        <button
+                            onClick={onDeny}
+                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-lg transition-colors"
+                        >
+                            <Icons.X size={14} /> Deny
+                        </button>
+                    </div>
+
+                    {/* GPS Refresh (Top Left) */}
+                    <div className="absolute top-4 left-4 z-20">
+                        <button
+                            onClick={() => {
+                                if (!isAutoRefresh) onForceRefresh(); // Fetch immediately on enable
+                                setIsAutoRefresh(!isAutoRefresh);
+                            }}
+                            className={`p-2 rounded-lg shadow-lg border border-white/10 transition-all flex items-center gap-2
+                                ${isAutoRefresh ? 'bg-green-500 hover:bg-green-600 text-white ring-2 ring-green-400 ring-offset-2 ring-offset-black' : 'bg-gray-800 hover:bg-gray-700 text-white'}
+                            `}
+                            title={isAutoRefresh ? "Auto-Update Active" : "Enable Auto-Update"}
+                        >
+                            <Icons.Crosshair size={14} className={isAutoRefresh ? "animate-spin-slow" : ""} />
+                            {isAutoRefresh ? (
+                                <span className="text-[10px] font-bold uppercase w-15 text-center">Live In {retryCountdown}s</span>
+                            ) : (
+                                <span className="text-[10px] font-bold uppercase hidden sm:inline">Force GPS Update</span>
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Scrollable Content Area */}
+                    <div className="flex-1 overflow-y-auto w-full">
+                        <div className="min-h-full flex flex-col pb-8">
+                            {/* Circular Map Visual */}
+                            <div className="relative w-full flex justify-center mt-12 mb-6 shrink-0">
+                                <div className="relative w-[260px] h-[260px]">
+                                    {/* SVG Ring */}
+                                    <svg height="260" width="260" className="absolute inset-0 rotate-[-90deg] z-10 pointer-events-none">
+                                        <circle stroke="#333" strokeWidth={stroke} fill="transparent" r={normalizedRadius} cx="130" cy="130" />
+                                        <circle
+                                            stroke="#3b82f6"
+                                            strokeWidth={stroke}
+                                            strokeDasharray={circumference + ' ' + circumference}
+                                            style={{ strokeDashoffset, transition: 'stroke-dashoffset 1s linear' }}
+                                            strokeLinecap="round"
+                                            fill="transparent"
+                                            r={normalizedRadius}
+                                            cx="130"
+                                            cy="130"
+                                        />
+                                    </svg>
+
+                                    {/* Inner Map Container */}
+                                    <div className="absolute inset-[14px] rounded-full overflow-hidden border-4 border-white/10 shadow-2xl bg-gray-800 z-0">
+                                        <MapComponent
+                                            id="driver-map"
+                                            className="w-full h-full"
+                                            targetLat={pickup.lat}
+                                            targetLng={pickup.lng}
+                                            radius={pickup.radius}
+                                            driverLocation={driverLocation}
+                                            driverAccuracy={driverAccuracy}
+                                            // Pass explicit Start/End for visual route on map widget
+                                            routeStart={driverLocation}
+                                            routeEnd={isOrderValid ? pickup : null}
+                                            onRouteFound={onRouteFound}
+                                        />
+                                        {!isOrderValid && (
+                                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                                <p className="text-xs font-bold text-gray-400">Waiting for Order...</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Content Body */}
+                            <div className="flex-1 px-5 flex flex-col items-center max-w-md mx-auto w-full">
+                                {!isOrderValid ? (
+                                    <div className="flex flex-col items-center justify-center flex-1 w-full text-center">
+                                        <Icons.Loader2 size={40} className="text-gray-600 animate-spin mb-4" />
+                                        <h2 className="text-2xl font-bold text-gray-400">Waiting For Location...</h2>
+                                        <p className="text-gray-500 mt-2 text-sm">Please wait while we assign you a trip.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <h2 className="text-2xl font-bold mb-6 text-white tracking-tight text-center">
+                                            {orderStatus === 'PENDING' && "New order!"}
+                                            {orderStatus === 'ACCEPTED' && "Head to Pickup"}
+                                            {orderStatus === 'IN_TRANSIT' && "Head to Drop"}
+                                            {orderStatus === 'COMPLETED' && "Order Completed"}
+                                        </h2>
+
+                                        {/* Trip Stats */}
+                                        <div className="w-full bg-[#1e1e1e] rounded-xl border border-white/10 overflow-hidden mb-4 shadow-lg shrink-0">
+                                            <div className="py-3 text-center border-b border-white/10 p-4">
+                                                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-1">Trip distance</p>
+                                                <p className="text-xl font-bold text-white">{(routeStats.distance / 1000).toFixed(1)} <span className="text-sm font-medium text-gray-400">km</span></p>
+                                            </div>
+                                            <div className="flex divide-x divide-white/10">
+                                                <div className={`flex-1 py-3 text-center ${orderStatus === 'ACCEPTED' ? 'bg-amber-900/20' : 'bg-[#1e1e1e]'}`}>
+                                                    <p className="text-gray-500 text-[9px] font-bold uppercase tracking-wider">Pickup</p>
+                                                    <p className="text-white text-sm font-bold">{(routeStats.distance / 1000).toFixed(1)} kms</p>
+                                                </div>
+                                                <div className={`flex-1 py-3 text-center ${orderStatus === 'IN_TRANSIT' ? 'bg-blue-900/20' : 'bg-[#1e1e1e]'}`}>
+                                                    <p className="text-gray-500 text-[9px] font-bold uppercase tracking-wider">Drop</p>
+                                                    <p className="text-white text-sm font-bold">4.4 kms</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Pickup Details Card */}
+                                        <div className="w-full bg-[#1e1e1e] rounded-xl border border-white/10 p-4 text-left relative overflow-hidden group shadow-lg mb-auto shrink-0">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-white/20"></div>
+                                            <div className="pl-3">
+                                                <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                                                    {orderStatus === 'IN_TRANSIT' ? 'Drop At' : 'Pickup From'}
+                                                </p>
+                                                <h3 className="text-lg font-bold text-white mb-1 leading-tight">
+                                                    {orderStatus === 'IN_TRANSIT' ? (drop.locality || "Select Drop") : (pickup.locality || "Unknown")}
+                                                </h3>
+                                                <p className="text-xs text-gray-400 leading-normal mb-3">
+                                                    {orderStatus === 'IN_TRANSIT'
+                                                        ? `${drop.block || ''} ${drop.district || ''}`
+                                                        : `${pickup.block || ''} ${pickup.district || ''}`
+                                                    }
+                                                </p>
+
+                                                <div className="flex items-center gap-2 text-[10px] font-bold text-gray-300 uppercase tracking-wider">
+                                                    <Icons.Loader2 size={12} className="text-green-500" />
+                                                    <span>{Math.ceil(routeStats.time / 60)} mins away</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Accept Swipe Button */}
+                                        <div className="w-full mt-6 mb-8 shrink-0">
+                                            {/* Key forces re-render when label changes to reset swipe state */}
+                                            <SwipeButton
+                                                key={`${orderStatus}-${actionAttempt}-${localResetKey}`}
+                                                onConfirm={handleSwipeConfirm}
+                                                label={
+                                                    orderStatus === 'PENDING' ? "Slide to Accept" :
+                                                        orderStatus === 'ACCEPTED' ? "At Pickup" :
+                                                            orderStatus === 'IN_TRANSIT' ? "At Drop" : "Completed"
+                                                }
+                                                successLabel="Processing..."
+                                                isLoading={false}
+                                                color={getButtonColor()}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ADMIN DASHBOARD (ZOMATO STYLE) ---
+        const AdminDashboard = ({ pickup, drop, driverLocation, routeStats, orderStatus, onRefresh, isAutoRefresh }) => {
+            return (
+                <div className="absolute bottom-4 left-4 right-4 md:left-4 md:right-auto md:w-96 z-30 font-sans">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in">
+                        {/* Header Status */}
+                        <div className="bg-slate-800 p-4 text-white flex justify-between items-center relative overflow-hidden">
+                            {/* Refresh Button & Live Status (Top Right) */}
+                            <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+                                {/* LIVE Badge */}
+                                <div className={`px-2 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors border ${isAutoRefresh ? 'bg-green-500 text-white border-green-400' : 'bg-slate-700/50 text-slate-400 border-white/5'}`}>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${isAutoRefresh ? 'bg-white animate-pulse' : 'bg-slate-500'}`}></div>
+                                    Live
+                                </div>
+
+                                <button
+                                    onClick={onRefresh}
+                                    className="bg-white/10 hover:bg-white/20 p-2 rounded-full text-white transition-all border border-white/10"
+                                    title="Refresh Driver Location"
+                                >
+                                    <Icons.RefreshCcw size={14} />
+                                </button>
+                            </div>
+
+                            <div>
+                                <h2 className="text-lg font-bold tracking-tight">
+                                    {orderStatus === 'ACCEPTED' ? 'Driver on the way' : 'Looking for Driver...'}
+                                </h2>
+                                <p className="text-xs text-slate-300 font-medium mt-0.5">
+                                    {orderStatus === 'ACCEPTED' ? 'Arriving at pickup location' : 'Waiting for partner confirmation'}
+                                </p>
+                            </div>
+                            <div className="bg-white/10 p-2 rounded-full mt-8">
+                                {orderStatus === 'ACCEPTED' ? <Icons.Truck className="text-green-400" /> : <Icons.Loader2 className="animate-spin text-amber-400" />}
+                            </div>
+                        </div>
+
+                        {/* Stats Row */}
+                        <div className="flex divide-x divide-gray-100 border-b border-gray-100">
+                            <div className="flex-1 p-3 text-center">
+                                <span className="block text-[10px] uppercase font-bold text-gray-400">ETA</span>
+                                <span className="block text-xl font-black text-slate-800">{Math.ceil(routeStats.time / 60)} <span className="text-xs font-bold text-gray-400">MIN</span></span>
+                            </div>
+                            <div className="flex-1 p-3 text-center">
+                                <span className="block text-[10px] uppercase font-bold text-gray-400">Distance</span>
+                                <span className="block text-xl font-black text-slate-800">{(routeStats.distance / 1000).toFixed(1)} <span className="text-xs font-bold text-gray-400">KM</span></span>
+                            </div>
+                        </div>
+
+                        {/* Driver / Location Details */}
+                        <div className="p-4 space-y-4">
+                            {/* Locations */}
+                            <div className="relative pl-6 space-y-6 before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gradient-to-b before:from-amber-400 before:to-blue-500">
+                                {/* Pickup */}
+                                <div className="relative">
+                                    <div className="absolute -left-6 top-1 w-3 h-3 bg-white border-[3px] border-amber-500 rounded-full"></div>
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                        <p className="text-[10px] font-bold text-amber-600 uppercase">Pickup</p>
+                                        {(orderStatus === 'IN_TRANSIT' || orderStatus === 'COMPLETED') && <Icons.CheckCircle size={12} className="text-green-600" />}
+                                    </div>
+                                    <p className="text-sm font-bold text-slate-800 leading-tight">{pickup.locality || "Select Pickup"}</p>
+                                    <p className="text-xs text-slate-500">{pickup.district}</p>
+                                </div>
+                                {/* Drop */}
+                                <div className="relative">
+                                    <div className="absolute -left-6 top-1 w-3 h-3 bg-white border-[3px] border-blue-600 rounded-full"></div>
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                        <p className="text-[10px] font-bold text-blue-600 uppercase">Drop</p>
+                                        {orderStatus === 'COMPLETED' && <Icons.CheckCircle size={12} className="text-green-600" />}
+                                    </div>
+                                    <p className="text-sm font-bold text-slate-800 leading-tight">{drop.locality || "Select Drop"}</p>
+                                    <p className="text-xs text-slate-500">{drop.district}</p>
+                                </div>
+                            </div>
+
+                            {/* Driver Profile (If accepted) */}
+                            {orderStatus === 'ACCEPTED' && (
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-xl">👮‍♂️</div>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-900">Partner #TN58 AK 3494</p>
+                                        <p className="text-xs text-slate-500 font-medium">Load Id • 1373</p>
+                                    </div>
+                                    <button className="ml-auto bg-white border border-gray-200 p-2 rounded-full text-green-600 shadow-sm">
+                                        <Icons.Navigation size={16} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+        const GeoFenceApp = () => {
+            const [view, setView] = useState('admin'); // 'admin' | 'driver'
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+            const [dragY, setDragY] = useState(0); // Track drag amount
+
+            // LOGISTICS STATE
+            const [status, setStatus] = useState('PICKUP'); // 'PICKUP' | 'DROP'
+            const [orderStatus, setOrderStatus] = useState('PENDING'); // 'PENDING' | 'ACCEPTED'
+
+            // Sync Admin View Status with Order Progress
+            useEffect(() => {
+                if (orderStatus === 'ACCEPTED') setStatus('PICKUP'); // Auto-switch to Pickup view (Green)
+                if (orderStatus === 'IN_TRANSIT') setStatus('DROP'); // Auto-switch to Drop view (Red)
+            }, [orderStatus]);
+
+            // LOCATIONS
+            const [pickup, setPickup] = useState({ pincode: '', district: '', state: '', block: '', locality: '', lat: null, lng: null, radius: 500, manualCoords: '' });
+            const [drop, setDrop] = useState({ pincode: '', district: '', state: '', block: '', locality: '', lat: null, lng: null, radius: 500, manualCoords: '' });
+
+            // DRIVER STATE
+            const [driverLocation, setDriverLocation] = useState(null);
+            const [driverSearching, setDriverSearching] = useState(false);
+            const [driverAccuracy, setDriverAccuracy] = useState(null);
+
+            // AUTO REFRESH STATE (Lifted from DriverView)
+            const [isAutoRefresh, setIsAutoRefresh] = useState(false);
+            const [retryCountdown, setRetryCountdown] = useState(10);
+
+            // ROUTE STATS
+            const [routeStats, setRouteStats] = useState({ distance: 0, time: 0 }); // distance in m, time in s
+            const [actionAttempt, setActionAttempt] = useState(0); // To force button reset on failed logic checks
+
+            // Determine current target & routing points
+            let routingFrom = null;
+            let routingTo = null;
+
+            if (orderStatus === 'IN_TRANSIT') {
+                // Route: Driver -> Drop
+                routingFrom = driverLocation;
+                routingTo = drop;
+            } else {
+                // Route: Driver -> Pickup (If driver exists, otherwise Pickup -> Drop)
+                if (driverLocation && driverLocation.lat) {
+                    routingFrom = driverLocation;
+                    routingTo = pickup;
+                } else {
+                    routingFrom = pickup.lat ? { lat: pickup.lat, lng: pickup.lng } : null;
+                    routingTo = drop;
+                }
+            }
+
+            const activeTarget = status === 'PICKUP' ? pickup : drop;
+
+            // NEW: Use watchPosition for high-accuracy continuous tracking
+            useEffect(() => {
+                let watchId;
+
+                const startTracking = () => {
+                    if (!navigator.geolocation) {
+                        alert("GPS not supported");
+                        return;
+                    }
+
+                    // Options for high accuracy
+                    const options = {
+                        enableHighAccuracy: true,
+                        timeout: 30000, // Increased to 30s to prevent timeout errors
+                        maximumAge: 2000 // Allow slightly cached position (2s)
+                    };
+
+                    const success = (pos) => {
+                        const { latitude, longitude, accuracy } = pos.coords;
+                        setDriverLocation({ lat: latitude, lng: longitude });
+                        setDriverAccuracy(accuracy);
+                        setDriverSearching(false);
+                    };
+
+                    const error = (err) => {
+                        console.warn("GPS Watch Error:", err.message);
+                        if (err.code === 1) { // PERMISSION_DENIED
+                            alert("GPS Permission Denied. Please enable location services.");
+                            setDriverSearching(false);
+                        }
+                    };
+
+                    watchId = navigator.geolocation.watchPosition(success, error, options);
+                };
+
+                // Start tracking if in Driver View OR Order is Accepted (for live tracking)
+                if (view === 'driver' || orderStatus === 'ACCEPTED') {
+                    setDriverSearching(true);
+                    startTracking();
+                } else {
+                    setDriverSearching(false);
+                    if (watchId) navigator.geolocation.clearWatch(watchId);
+                }
+
+                return () => {
+                    if (watchId) navigator.geolocation.clearWatch(watchId);
+                };
+            }, [view, orderStatus]);
+
+            const handleDriverAction = (action) => {
+                // 1. Check Permissions/Location
+                if (!driverLocation) {
+                    handleManualCheckIn();
+                    // Allow one retry or just proceed directly if logic permits, usually alerts user
+                }
+
+                if (action === 'ACCEPT') {
+                    setOrderStatus('ACCEPTED');
+                    // NO redirect to Admin view - stay on Driver view to see "At Pickup"
+                    // No logic check required for first slide
+                }
+                else if (action === 'ARRIVED_PICKUP') {
+                    // Check if near Pickup
+                    if (driverLocation && pickup.lat) {
+                        const dist = getDistanceMeters(driverLocation.lat, driverLocation.lng, pickup.lat, pickup.lng);
+                        if (dist > (pickup.radius || 500)) {
+                            alert("You are not at pickup location call haggl broker for any issues....,");
+                            setActionAttempt(prev => prev + 1); // Reset swipe button
+                            return;
+                        }
+                    } else {
+                        // Safety fallback if gps not ready
+                        alert("Waiting for GPS location...");
+                        setActionAttempt(prev => prev + 1);
+                        return;
+                    }
+                    setOrderStatus('IN_TRANSIT');
+                }
+                else if (action === 'ARRIVED_DROP') {
+                    // Check if near Drop
+                    if (driverLocation && drop.lat) {
+                        const dist = getDistanceMeters(driverLocation.lat, driverLocation.lng, drop.lat, drop.lng);
+                        if (dist > (drop.radius || 500)) {
+                            alert("You are not at drop location. Please contact Haggl broker.");
+                            setActionAttempt(prev => prev + 1); // Reset swipe button
+                            return;
+                        }
+                    } else {
+                        alert("Waiting for GPS location...");
+                        setActionAttempt(prev => prev + 1);
+                        return;
+                    }
+                    setOrderStatus('COMPLETED');
+                    alert("Order Completed! Great job.");
+                }
+            };
+
+            // Manual Check-in (Backup button)
+            const handleManualCheckIn = () => {
+                setDriverSearching(true);
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    const { latitude, longitude, accuracy } = pos.coords;
+                    setDriverLocation({ lat: latitude, lng: longitude });
+                    setDriverAccuracy(accuracy);
+                    setDriverSearching(false);
+                }, (err) => {
+                    alert("GPS Error: " + err.message);
+                    setDriverSearching(false);
+                }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 2000 });
+            };
+
+            // Sync manual check-in with timer reset
+            const handleAdminRefresh = () => {
+                handleManualCheckIn();
+            }
+
+            // AUTO REFRESH EFFECT (Global Control)
+            useEffect(() => {
+                let interval;
+                // Run if engaged (PERSISTENT across views)
+                if (isAutoRefresh) {
+                    interval = setInterval(() => {
+                        setRetryCountdown(prev => {
+                            if (prev <= 1) {
+                                handleManualCheckIn(); // Trigger refresh
+                                return 10; // Reset countdown
+                            }
+                            return prev - 1;
+                        });
+                    }, 1000);
+                } else {
+                    setRetryCountdown(10); // Reset when inactive
+                }
+                return () => clearInterval(interval);
+            }, [isAutoRefresh]); // Removed 'view' dependency so it stays active
+
+            // Drag Logic
+            const dragStartY = useRef(0);
+            const isDragging = useRef(false);
+
+            const handleDragStart = (e) => {
+                isDragging.current = true;
+                dragStartY.current = e.touches ? e.touches[0].clientY : e.clientY;
+            };
+
+            const handleDragMove = (e) => {
+                if (!isDragging.current) return;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                const delta = clientY - dragStartY.current;
+                if (delta > 0) setDragY(delta); // Only allow dragging down
+            };
+
+            const handleDragEnd = () => {
+                isDragging.current = false;
+                if (dragY > 100) {
+                    setIsSidebarOpen(false); // Close if dragged enough
+                }
+                setDragY(0); // Reset
+            };
+
+            return (
+                <div className="flex flex-col h-screen overflow-hidden relative"
+                    onMouseMove={handleDragMove}
+                    onMouseUp={handleDragEnd}
+                    onTouchMove={handleDragMove}
+                    onTouchEnd={handleDragEnd}
+                >
+
+                    {/* Header */}
+                    <div className="absolute top-0 left-0 right-0 z-20 p-4 pointer-events-none">
+                        <div className="flex justify-between items-start">
+                            <div className="bg-white/90 backdrop-blur shadow-lg border border-white/50 p-2 rounded-xl pointer-events-auto">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <img src="./haggl-logo.png" className="h-8 object-contain" alt="Haggl Logistics" />
+                                    {orderStatus === 'ACCEPTED' && (
+                                        <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full border border-green-200 uppercase tracking-wider">
+                                            Live Tracking
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2 pointer-events-auto">
+                                <div className="bg-white/90 backdrop-blur shadow-lg p-1 rounded-lg flex gap-1">
+                                    <button onClick={() => setView('admin')} className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${view === 'admin' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Admin</button>
+                                    <button onClick={() => setView('driver')} className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${view === 'driver' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Driver</button>
+                                </div>
+
+                                {view === 'admin' && (
+                                    <button
+                                        onClick={() => setIsSidebarOpen(true)}
+                                        className="bg-white/90 backdrop-blur shadow-lg p-2 rounded-lg text-slate-700 hover:bg-slate-100"
+                                    >
+                                        <Icons.Menu size={20} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* STATUS TOGGLE - FIXED TOP CENTER (Only show if not accepted) */}
+                    {orderStatus !== 'ACCEPTED' && (
+                        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+                            <div className="flex items-center bg-white/90 backdrop-blur-md shadow-xl rounded-full p-1.5 border border-white/50">
+                                <button
+                                    onClick={() => setStatus('PICKUP')}
+                                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${status === 'PICKUP' ? 'bg-[#FFCC00] text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    PICKUP
+                                </button>
+                                <span className="text-slate-300 mx-1"><Icons.Navigation size={12} className="rotate-90" /></span>
+                                <button
+                                    onClick={() => setStatus('DROP')}
+                                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${status === 'DROP' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    DROP
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* BOTTOM DRAWER (ADDRESS FORMS) - Zomato Style */}
+                    <div className={`fixed inset-x-0 bottom-0 z-40 transform transition-transform duration-500 cubic-bezier(0.32, 0.72, 0, 1) ${isSidebarOpen && view === 'admin' ? 'translate-y-0' : 'translate-y-full'}`}>
+                        {/* Floating Close Button - Only show when open */}
+                        <div
+                            className={`absolute -top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-auto transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                            style={{ transform: `translateX(-50%) translateY(${dragY}px)` }}
+                        >
+                            <button
+                                onClick={() => setIsSidebarOpen(false)}
+                                className="bg-white text-slate-800 p-3 rounded-full shadow-xl hover:scale-110 transition-transform active:scale-95 flex items-center justify-center"
+                            >
+                                <Icons.X size={24} />
+                            </button>
+                        </div>
+
+                        {/* Drawer Content */}
+                        <div
+                            className="bg-white rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.2)] max-w-2xl mx-auto overflow-hidden flex flex-col max-h-[85vh] transition-transform duration-75 ease-out"
+                            style={{ transform: `translateY(${dragY}px)` }}
+                        >
+
+                            {/* Drag Handle & Header */}
+                            <div
+                                className="pt-3 pb-2 px-6 bg-slate-50 border-b border-gray-100 cursor-grab active:cursor-grabbing"
+                                onMouseDown={handleDragStart}
+                                onTouchStart={handleDragStart}
+                            >
+                                {/* Handle Bar */}
+                                <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-4"></div>
+
+                                <h2 className="text-center font-black text-slate-800 text-lg mb-6">Location Settings</h2>
+
+                                <div className="flex bg-slate-200 p-1 rounded-xl relative">
+                                    {/* Animated Background Pill */}
+                                    <div
+                                        className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-lg shadow-sm transition-all duration-300 ease-out`}
+                                        style={{ left: status === 'PICKUP' ? '4px' : 'calc(50% + 0px)' }}
+                                    ></div>
+
+                                    <button
+                                        onClick={() => setStatus('PICKUP')}
+                                        className={`flex-1 relative z-10 py-2.5 text-xs font-bold uppercase tracking-wider text-center transition-colors ${status === 'PICKUP' ? 'text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        Pickup
+                                    </button>
+                                    <button
+                                        onClick={() => setStatus('DROP')}
+                                        className={`flex-1 relative z-10 py-2.5 text-xs font-bold uppercase tracking-wider text-center transition-colors ${status === 'DROP' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        Drop
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Carousel Content Area */}
+                            <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 bg-white safe-pb">
+                                <div className="flex transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]" style={{ transform: `translateX(${status === 'PICKUP' ? '0%' : '-100%'})` }}>
+
+                                    {/* Slide 1: Pickup */}
+                                    <div className="min-w-full px-1">
+                                        <AddressForm
+                                            type="pickup"
+                                            data={pickup}
+                                            onChange={setPickup}
+                                            onCoordsUpdate={(lat, lng) => setPickup(prev => ({ ...prev, lat, lng }))}
+                                        />
+                                    </div>
+
+                                    {/* Slide 2: Drop */}
+                                    <div className="min-w-full px-1">
+                                        <AddressForm
+                                            type="drop"
+                                            data={drop}
+                                            onChange={setDrop}
+                                            onCoordsUpdate={(lat, lng) => setDrop(prev => ({ ...prev, lat, lng }))}
+                                        />
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* OVERLAY for Bottom Drawer */}
+                    {isSidebarOpen && view === 'admin' && (
+                        <div
+                            className="fixed inset-0 bg-black/40 z-30 backdrop-blur-[2px] transition-opacity duration-300"
+                            onClick={() => setIsSidebarOpen(false)}
+                        ></div>
+                    )}
+
+                    {/* Map Layer */}
+                    <div className="flex-1 relative z-0">
+                        <MapComponent
+                            targetLat={activeTarget.lat}
+                            targetLng={activeTarget.lng}
+                            radius={activeTarget.radius}
+                            targetType={status === 'PICKUP' ? 'pickup' : 'drop'} // Pass type for color
+                            // Map Component now has explicit driverLocation prop to show the truck icon
+                            driverLocation={driverLocation}
+                            driverAccuracy={driverAccuracy}
+                            // And explicit route props to draw the blue line
+                            routeStart={routingFrom}
+                            routeEnd={routingTo}
+                            onRouteFound={(dist, time) => setRouteStats({ distance: dist, time: time })}
+                        />
+                    </div>
+
+                    {/* ADMIN OVERLAY DASHBOARD (Zomato Style) */}
+                    {view === 'admin' && (
+                        <AdminDashboard
+                            pickup={pickup}
+                            drop={drop}
+                            orderStatus={orderStatus}
+                            routeStats={routeStats}
+                            driverLocation={driverLocation}
+                            onRefresh={handleAdminRefresh}
+                            isAutoRefresh={isAutoRefresh}
+                        />
+                    )}
+
+                    {/* DRIVER UI (Replaces Admin View when active) */}
+                    {view === 'driver' && (
+                        <DriverView
+                            pickup={activeTarget}
+                            drop={drop}
+                            driverLocation={driverLocation}
+                            driverAccuracy={driverAccuracy}
+                            routeStats={routeStats}
+                            orderStatus={orderStatus}
+                            actionAttempt={actionAttempt}
+                            onAccept={handleDriverAction}
+                            onDeny={() => setView('admin')}
+                            onRouteFound={(dist, time) => setRouteStats({ distance: dist, time: time })}
+                            onForceRefresh={handleManualCheckIn}
+                            isAutoRefresh={isAutoRefresh}
+                            setIsAutoRefresh={setIsAutoRefresh}
+                            retryCountdown={retryCountdown}
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<GeoFenceApp />);
+    </script>
+</body>
+
+</html>
