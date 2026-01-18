@@ -62,12 +62,6 @@
             }
         }
 
-        /* Smooth Map Marker Transition */
-        .leaflet-marker-icon,
-        .leaflet-marker-shadow {
-            transition: transform 1.5s linear;
-        }
-
         .animate-in {
             animation: fade-in-up 0.5s ease-out;
         }
@@ -463,49 +457,45 @@
 
                 // --- 2. Driver Marker & Accuracy (Real Driver position) ---
                 if (driverLocation) {
-                    if (markersRef.current.driver) {
-                        // UPDATE existing marker for smooth animation (CSS transition handles the glide)
-                        markersRef.current.driver.setLatLng([driverLocation.lat, driverLocation.lng]);
-                        // Only remove accuracy circle to redraw
-                        if (markersRef.current.accuracyCircle) map.removeLayer(markersRef.current.accuracyCircle);
-                    } else {
-                        // CREATE new marker
-                        const driverIcon = L.divIcon({
-                            className: 'custom-div-icon',
-                            html: `<div style="position:relative; width:50px; height:50px;">
-                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" style="width:100%; height:100%; filter: drop-shadow(0 5px 8px rgba(0,0,0,0.4)); transform: rotate(180deg);">
-                                        {/* Wheels */}
-                                        <rect x="10" y="20" width="12" height="24" rx="4" fill="#333" />
-                                        <rect x="78" y="20" width="12" height="24" rx="4" fill="#333" />
-                                        <rect x="10" y="65" width="12" height="24" rx="4" fill="#333" />
-                                        <rect x="78" y="65" width="12" height="24" rx="4" fill="#333" />
-                                        
-                                        {/* Chassis shadow */}
-                                        <rect x="22" y="15" width="56" height="80" rx="4" fill="rgba(0,0,0,0.2)" />
-    
-                                        {/* Cargo Container (More detailed/Fun) */}
-                                        <rect x="20" y="40" width="60" height="55" rx="6" fill="#f87171" stroke="#b91c1c" strokeWidth="2" />
-                                        <path d="M20 40h60v20H20z" fill="#ef4444" />
-                                        
-                                        {/* Haggl Logo on Cargo */}
-                                        <image href="./haggl-logo.png" x="25" y="45" width="50" height="45" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
-                                        
-                                        {/* Cab */}
-                                        <path d="M22 40V20a8 8 0 0 1 8-8h40a8 8 0 0 1 8 8v20H22z" fill="#ef4444" stroke="#b91c1c" strokeWidth="2" />
-                                        
-                                        {/* Windshield & Roof */}
-                                        <path d="M28 15h44v12H28z" fill="#3b82f6" opacity="0.8" />
-                                        <path d="M30 15v-2a2 2 0 0 1 2-2h36a2 2 0 0 1 2 2v2" fill="#ef4444" />
-                                        
-                                        {/* Lights */}
-                                        <circle cx="26" cy="40" r="3" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
-                                        <circle cx="74" cy="40" r="3" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
-                                     </svg>
-                                   </div>`,
-                            iconSize: [50, 50], iconAnchor: [25, 25]
-                        });
-                        markersRef.current.driver = L.marker([driverLocation.lat, driverLocation.lng], { icon: driverIcon }).addTo(map);
-                    }
+                    if (markersRef.current.driver) map.removeLayer(markersRef.current.driver);
+                    if (markersRef.current.accuracyCircle) map.removeLayer(markersRef.current.accuracyCircle);
+
+                    const driverIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div style="position:relative; width:50px; height:50px;">
+                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" style="width:100%; height:100%; filter: drop-shadow(0 5px 8px rgba(0,0,0,0.4)); transform: rotate(180deg);">
+                                    {/* Wheels */}
+                                    <rect x="10" y="20" width="12" height="24" rx="4" fill="#333" />
+                                    <rect x="78" y="20" width="12" height="24" rx="4" fill="#333" />
+                                    <rect x="10" y="65" width="12" height="24" rx="4" fill="#333" />
+                                    <rect x="78" y="65" width="12" height="24" rx="4" fill="#333" />
+                                    
+                                    {/* Chassis shadow */}
+                                    <rect x="22" y="15" width="56" height="80" rx="4" fill="rgba(0,0,0,0.2)" />
+
+                                    {/* Cargo Container (More detailed/Fun) */}
+                                    <rect x="20" y="40" width="60" height="55" rx="6" fill="#f87171" stroke="#b91c1c" strokeWidth="2" />
+                                    <path d="M20 40h60v20H20z" fill="#ef4444" />
+                                    
+                                    {/* Haggl Logo on Cargo */}
+                                    <image href="./haggl-logo.png" x="25" y="45" width="50" height="45" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
+                                    
+                                    {/* Cab */}
+                                    <path d="M22 40V20a8 8 0 0 1 8-8h40a8 8 0 0 1 8 8v20H22z" fill="#ef4444" stroke="#b91c1c" strokeWidth="2" />
+                                    
+                                    {/* Windshield & Roof */}
+                                    <path d="M28 15h44v12H28z" fill="#3b82f6" opacity="0.8" />
+                                    <path d="M30 15v-2a2 2 0 0 1 2-2h36a2 2 0 0 1 2 2v2" fill="#ef4444" />
+                                    
+                                    {/* Lights */}
+                                    <circle cx="26" cy="40" r="3" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
+                                    <circle cx="74" cy="40" r="3" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
+                                 </svg>
+                               </div>`,
+                        iconSize: [50, 50], iconAnchor: [25, 25]
+                    });
+
+                    markersRef.current.driver = L.marker([driverLocation.lat, driverLocation.lng], { icon: driverIcon }).addTo(map);
 
                     // Add Accuracy Circle
                     if (driverAccuracy) {
