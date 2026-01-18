@@ -405,7 +405,7 @@
 
         // --- MAP COMPONENT ---
         // --- MAP COMPONENT ---
-        const MapComponent = ({ targetLat, targetLng, radius, targetType = 'default', driverLocation, driverAccuracy, routeStart, routeEnd, onRouteFound, className, id }) => {
+        const MapComponent = ({ targetLat, targetLng, radius, targetType = 'default', driverLocation, driverAccuracy, routeStart, routeEnd, onRouteFound, className, id, interactive = true }) => {
             const mapRef = useRef(null);
             const mapInstanceRef = useRef(null);
             const markersRef = useRef({ target: null, driver: null, accuracyCircle: null });
@@ -416,7 +416,17 @@
             useEffect(() => {
                 // Initialize Map
                 if (!mapInstanceRef.current && mapRef.current) {
-                    mapInstanceRef.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([20.5937, 78.9629], 5);
+                    mapInstanceRef.current = L.map(mapRef.current, {
+                        zoomControl: false,
+                        attributionControl: false,
+                        dragging: interactive,
+                        touchZoom: interactive,
+                        scrollWheelZoom: interactive,
+                        doubleClickZoom: interactive,
+                        boxZoom: interactive,
+                        keyboard: interactive
+                    }).setView([20.5937, 78.9629], 5);
+
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                         attribution: '&copy; OpenStreetMap &copy; CartoDB',
                         subdomains: 'abcd',
@@ -951,6 +961,7 @@
                                             routeStart={driverLocation}
                                             routeEnd={isOrderValid ? pickup : null}
                                             onRouteFound={onRouteFound}
+                                            interactive={false}
                                         />
                                         {!isOrderValid && (
                                             <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
