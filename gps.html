@@ -3,8 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Haggl - Logistics Brokerage</title>
 
     <!-- Tailwind CSS -->
@@ -38,8 +37,6 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            overscroll-behavior: none;
-            touch-action: pan-y;
         }
 
         /* Custom animations */
@@ -71,6 +68,29 @@
 
         .slide-in {
             animation: slide-in-right 0.3s ease-out;
+        }
+
+        /* Oscillating Loader for Map Circle */
+        @keyframes loader-oscillate {
+            0% {
+                stroke-dasharray: 50 1000;
+                stroke-dashoffset: 0;
+            }
+
+            50% {
+                stroke-dasharray: 400 1000;
+                stroke-dashoffset: -200;
+            }
+
+            100% {
+                stroke-dasharray: 50 1000;
+                stroke-dashoffset: -700;
+            }
+        }
+
+        .animate-loader-oscillate {
+            animation: loader-oscillate 2s ease-in-out infinite;
+            transform-origin: center;
         }
 
         /* Map Container */
@@ -408,8 +428,7 @@
 
         // --- MAP COMPONENT ---
         // --- MAP COMPONENT ---
-        // --- MAP COMPONENT ---
-        const MapComponent = ({ targetLat, targetLng, radius, targetType = 'default', driverLocation, driverAccuracy, routeStart, routeEnd, onRouteFound, className, id, interactive = true, onRoutingStart, onRoutingSuccess, onRoutingError }) => {
+        const MapComponent = ({ targetLat, targetLng, radius, targetType = 'default', driverLocation, driverAccuracy, routeStart, routeEnd, onRouteFound, className, id, interactive = true }) => {
             const mapRef = useRef(null);
             const mapInstanceRef = useRef(null);
             const markersRef = useRef({ target: null, driver: null, accuracyCircle: null });
@@ -516,8 +535,8 @@
                         markersRef.current.accuracyCircle = L.circle([driverLocation.lat, driverLocation.lng], {
                             color: '#F59E0B',
                             fillColor: '#F59E0B',
-                            fillOpacity: 0.3,
-                            weight: 2,
+                            fillOpacity: 0.15,
+                            weight: 1,
                             dashArray: '4, 4',
                             radius: driverAccuracy
                         }).addTo(map);
@@ -528,30 +547,22 @@
                 if (routeStart && routeEnd && routeStart.lat && routeEnd.lat) {
                     if (routingControlRef.current) {
                         // UPDATE existing control to avoid performance hit and errors
-                        if (onRoutingStart) onRoutingStart(); // Signal start
                         routingControlRef.current.setWaypoints([
                             L.latLng(routeStart.lat, routeStart.lng),
                             L.latLng(routeEnd.lat, routeEnd.lng)
                         ]);
                     } else {
                         // CREATE new control
-                        if (onRoutingStart) onRoutingStart(); // Signal start
                         routingControlRef.current = L.Routing.control({
                             waypoints: [
                                 L.latLng(routeStart.lat, routeStart.lng),
                                 L.latLng(routeEnd.lat, routeEnd.lng)
                             ],
-                            router: new L.Routing.OSRMv1({
-                                serviceUrl: 'https://router.project-osrm.org/route/v1',
-                                profile: 'driving'
-                            }),
-                            lineOptions: {
-                                styles: [{ color: '#3b82f6', opacity: 1, weight: 7 }]
-                            },
+                            lineOptions: { styles: [{ color: '#6366f1', opacity: 0.8, weight: 6 }] },
                             createMarker: () => null,
                             addWaypoints: false,
                             show: false,
-                            fitSelectedRoutes: false // We handle fitting manually for better control
+                            fitSelectedRoutes: false // Disable auto-fit so we can control it manually below
                         })
                             .on('routesfound', function (e) {
                                 const routes = e.routes;
@@ -564,16 +575,11 @@
                                     // Padding [50, 50] creates a ~160px safe zone inside the 260px circle.
                                     // This pushes markers to the "corners" while keeping icons (25px radius) safe from clipping.
                                     map.fitBounds(routes[0].coordinates, {
-                                        padding: [50, 50],
+                                        padding: [80, 80],
                                         maxZoom: 16,
                                         animate: true
                                     });
-                                    if (onRoutingSuccess) onRoutingSuccess();
                                 }
-                            })
-                            .on('routingerror', function (e) {
-                                console.warn("Routing Error", e);
-                                if (onRoutingError) onRoutingError();
                             })
                             .addTo(map);
                     }
@@ -600,7 +606,7 @@
                             [driverLocation.lat, driverLocation.lng],
                             [targetLat, targetLng]
                         ]);
-                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16, animate: true });
+                        map.fitBounds(bounds, { padding: [80, 80], maxZoom: 16, animate: true });
                     } else if (driverLocation) {
                         map.panTo([driverLocation.lat, driverLocation.lng], { animate: true });
                     } else if (targetLat) {
@@ -608,15 +614,9 @@
                         // Fallback view logic merged here for cleaner flow
                         if (!driverLocation) map.setView([targetLat, targetLng], 14);
                     }
-                } else {
-                    // IMMEDIATE FIT: When routing starts, don't wait for API. Fit to start/end points immediately.
-                    // This fixes "no immediate routing" visual lag.
-                    const bounds = L.latLngBounds([
-                        [routeStart.lat, routeStart.lng],
-                        [routeEnd.lat, routeEnd.lng]
-                    ]);
-                    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16, animate: true });
                 }
+                // IF isRouting == true: Do nothing here. The 'routesfound' callback above will handle the camera.
+                // This prevents the map from "jumping" to the driver location and then to the route.
             }, [targetLat, targetLng, radius, targetType, driverLocation, driverAccuracy, routeStart, routeEnd]);
 
             return <div ref={mapRef} id={mapId} className={className || "w-full h-full"}></div>;
@@ -798,10 +798,6 @@
             const [showSuccessPopup, setShowSuccessPopup] = useState(false);
             const [successPopupColor, setSuccessPopupColor] = useState("green");
 
-            // Routing Loading State
-            const [isRouteLoading, setIsRouteLoading] = useState(false);
-            const [routeError, setRouteError] = useState(false);
-
             // Alert State
             const [showLocationAlert, setShowLocationAlert] = useState(false);
             const [locationAlertMessage, setLocationAlertMessage] = useState("");
@@ -836,7 +832,12 @@
             const stroke = 6;
             const normalizedRadius = radius - stroke * 2;
             const circumference = normalizedRadius * 2 * Math.PI;
-            const strokeDashoffset = circumference - (fraction * circumference);
+
+            // LOADER LOGIC: 
+            // 1. If no route distance yet -> Indeterminate (back and forth)
+            // 2. If route found -> Complete full circle
+            const isRouteCalculated = routeStats.distance > 0;
+            const strokeDashoffset = isRouteCalculated ? 0 : circumference; // 0 = Full Circle
 
             // NEW: Check if order is valid
             const isOrderValid = pickup.lat && drop.lat;
@@ -849,14 +850,31 @@
                 return 'green';
             };
 
-            const handleSwipeConfirm = () => {
+            const handleSwipeConfirm = async () => {
+                let currentLoc = driverLocation;
+
+                // 1. Force Fetch if Auto-Refresh is OFF (Ensure we validate with latest)
+                if (!isAutoRefresh) {
+                    try {
+                        const pos = await new Promise((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 });
+                        });
+                        currentLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    } catch (e) {
+                        setLocationAlertMessage("Cannot fetch GPS. Enable GPS or try again.");
+                        setShowLocationAlert(true);
+                        setLocalResetKey(prev => prev + 1);
+                        return;
+                    }
+                }
+
                 // Validation Logic
                 if (orderStatus === 'ACCEPTED') {
                     // Check Pickup Radius
-                    if (driverLocation && pickup.lat) {
-                        const dist = getDist(driverLocation.lat, driverLocation.lng, pickup.lat, pickup.lng);
+                    if (currentLoc && pickup.lat) {
+                        const dist = getDist(currentLoc.lat, currentLoc.lng, pickup.lat, pickup.lng);
                         if (dist > (pickup.radius || 500)) {
-                            setLocationAlertMessage("You are not at the pickup location. Please ensure you have arrived at the correct address.");
+                            setLocationAlertMessage(`You are too far from pickup (${Math.round(dist)}m). Arrive at location first.`);
                             setShowLocationAlert(true);
                             setLocalResetKey(prev => prev + 1); // RESET BUTTON
                             return; // STOP
@@ -870,10 +888,10 @@
                     }
                 } else if (orderStatus === 'IN_TRANSIT') {
                     // Check Drop Radius
-                    if (driverLocation && drop.lat) {
-                        const dist = getDist(driverLocation.lat, driverLocation.lng, drop.lat, drop.lng);
+                    if (currentLoc && drop.lat) {
+                        const dist = getDist(currentLoc.lat, currentLoc.lng, drop.lat, drop.lng);
                         if (dist > (drop.radius || 500)) {
-                            setLocationAlertMessage("You are not at the drop location. Please ensure you have arrived at the destination.");
+                            setLocationAlertMessage(`You are too far from drop (${Math.round(dist)}m). Arrive at destination first.`);
                             setShowLocationAlert(true);
                             setLocalResetKey(prev => prev + 1); // RESET BUTTON
                             return; // STOP
@@ -959,19 +977,19 @@
                             <div className="relative w-full flex justify-center mt-12 mb-6 shrink-0">
                                 <div className="relative w-[260px] h-[260px]">
                                     {/* SVG Ring */}
-                                    <svg height="260" width="260" className={`absolute inset-0 z-10 pointer-events-none ${isRouteLoading ? 'animate-spin' : '-rotate-90'}`}>
+                                    <svg height="260" width="260" className="absolute inset-0 rotate-[-90deg] z-10 pointer-events-none">
                                         <circle stroke="#333" strokeWidth={stroke} fill="transparent" r={normalizedRadius} cx="130" cy="130" />
                                         <circle
-                                            stroke={isRouteLoading ? 'yellow' : '#3b82f6'}
+                                            stroke="#3b82f6"
                                             strokeWidth={stroke}
-                                            strokeDasharray={isRouteLoading ? ((circumference * 0.7) + ' ' + circumference) : (circumference + ' ' + circumference)}
-                                            strokeDashoffset={0}
+                                            strokeDasharray={circumference + ' ' + circumference}
+                                            style={{ strokeDashoffset, transition: 'stroke-dashoffset 1s ease-out' }}
                                             strokeLinecap="round"
                                             fill="transparent"
                                             r={normalizedRadius}
                                             cx="130"
                                             cy="130"
-                                            style={{ transition: 'all 0.5s ease' }}
+                                            className={!isRouteCalculated ? "animate-loader-oscillate" : ""}
                                         />
                                     </svg>
 
@@ -990,25 +1008,10 @@
                                             routeEnd={isOrderValid ? pickup : null}
                                             onRouteFound={onRouteFound}
                                             interactive={false}
-                                            onRoutingStart={() => { setIsRouteLoading(true); setRouteError(false); }}
-                                            onRoutingSuccess={() => setIsRouteLoading(false)}
-                                            onRoutingError={() => { setIsRouteLoading(false); setRouteError(true); }}
                                         />
                                         {!isOrderValid && (
                                             <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                                                 <p className="text-xs font-bold text-gray-400">Waiting for Order...</p>
-                                            </div>
-                                        )}
-                                        {isOrderValid && isRouteLoading && (
-                                            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10">
-                                                <Icons.Loader2 className="animate-spin text-blue-500 mb-2" size={32} />
-                                                <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Mapping Route...</p>
-                                            </div>
-                                        )}
-                                        {isOrderValid && routeError && (
-                                            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10">
-                                                <Icons.WifiOff className="text-red-500 mb-2" size={32} />
-                                                <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest">Route Failed</p>
                                             </div>
                                         )}
                                     </div>
@@ -1294,8 +1297,8 @@
                     watchId = navigator.geolocation.watchPosition(success, error, options);
                 };
 
-                // Start tracking if in Driver View OR Order is Accepted (for live tracking)
-                if (view === 'driver' || orderStatus === 'ACCEPTED') {
+                // Start tracking if in Driver View OR Order is Accepted AND AutoRefresh is ON
+                if ((view === 'driver' || orderStatus === 'ACCEPTED') && isAutoRefresh) {
                     setDriverSearching(true);
                     startTracking();
                 } else {
@@ -1306,13 +1309,37 @@
                 return () => {
                     if (watchId) navigator.geolocation.clearWatch(watchId);
                 };
-            }, [view, orderStatus]);
+            }, [view, orderStatus, isAutoRefresh]); // Depend on isAutoRefresh
 
-            const handleDriverAction = (action) => {
+            const handleDriverAction = async (action) => {
+                // FETCH FRESH LOCATION IF AUTO-REFRESH IS OFF
+                let currentLoc = driverLocation;
+
+                if (!isAutoRefresh) {
+                    try {
+                        // Quick promise wrapper for current position
+                        const pos = await new Promise((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 });
+                        });
+                        const { latitude, longitude, accuracy } = pos.coords;
+                        currentLoc = { lat: latitude, lng: longitude };
+                        setDriverLocation(currentLoc);
+                        setDriverAccuracy(accuracy);
+                    } catch (e) {
+                        console.warn("Manual fetch failed on slide", e);
+                        // Fallback to existing or error
+                        if (!currentLoc) {
+                            alert("Cannot fetch GPS. Please enable GPS or try again.");
+                            setActionAttempt(prev => prev + 1);
+                            return;
+                        }
+                    }
+                }
+
                 // 1. Check Permissions/Location
-                if (!driverLocation) {
+                if (!currentLoc) {
                     handleManualCheckIn();
-                    // Allow one retry or just proceed directly if logic permits, usually alerts user
+                    return;
                 }
 
                 if (action === 'ACCEPT') {
@@ -1321,16 +1348,16 @@
                     // No logic check required for first slide
                 }
                 else if (action === 'ARRIVED_PICKUP') {
-                    // Check if near Pickup
-                    if (driverLocation && pickup.lat) {
-                        const dist = getDistanceMeters(driverLocation.lat, driverLocation.lng, pickup.lat, pickup.lng);
+                    // Check if near Pickup use currentLoc
+                    if (currentLoc && pickup.lat) {
+                        const dist = getDistanceMeters(currentLoc.lat, currentLoc.lng, pickup.lat, pickup.lng);
                         if (dist > (pickup.radius || 500)) {
-                            alert("You are not at pickup location call haggl broker for any issues....,");
+                            // Using standard alert for now
+                            alert("You are not at pickup location (" + Math.round(dist) + "m away).");
                             setActionAttempt(prev => prev + 1); // Reset swipe button
                             return;
                         }
                     } else {
-                        // Safety fallback if gps not ready
                         alert("Waiting for GPS location...");
                         setActionAttempt(prev => prev + 1);
                         return;
@@ -1338,11 +1365,11 @@
                     setOrderStatus('IN_TRANSIT');
                 }
                 else if (action === 'ARRIVED_DROP') {
-                    // Check if near Drop
-                    if (driverLocation && drop.lat) {
-                        const dist = getDistanceMeters(driverLocation.lat, driverLocation.lng, drop.lat, drop.lng);
+                    // Check if near Drop use currentLoc
+                    if (currentLoc && drop.lat) {
+                        const dist = getDistanceMeters(currentLoc.lat, currentLoc.lng, drop.lat, drop.lng);
                         if (dist > (drop.radius || 500)) {
-                            alert("You are not at drop location. Please contact Haggl broker.");
+                            alert("You are not at drop location (" + Math.round(dist) + "m away).");
                             setActionAttempt(prev => prev + 1); // Reset swipe button
                             return;
                         }
