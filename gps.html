@@ -428,13 +428,19 @@
 
         // --- MAP COMPONENT ---
         // --- MAP COMPONENT ---
-        const MapComponent = ({ targetLat, targetLng, radius, targetType = 'default', driverLocation, driverAccuracy, routeStart, routeEnd, onRouteFound, className, id, interactive = true }) => {
+        const MapComponent = ({ targetLat, targetLng, radius, targetType = 'default', driverLocation, driverAccuracy, routeStart, routeEnd, onRouteFound, className, id, interactive = true, lastRefreshType = 'MANUAL' }) => {
             const mapRef = useRef(null);
             const mapInstanceRef = useRef(null);
             const markersRef = useRef({ target: null, driver: null, accuracyCircle: null });
             const circleRef = useRef(null);
             const routingControlRef = useRef(null);
+            // Fix: Use ref to access latest refresh type inside callbacks (stale closure prevention)
+            const lastRefreshTypeRef = useRef(lastRefreshType);
             const mapId = id || "map-container";
+
+            useEffect(() => {
+                lastRefreshTypeRef.current = lastRefreshType;
+            }, [lastRefreshType]);
 
             useEffect(() => {
                 // Initialize Map
@@ -571,14 +577,14 @@
                                     if (onRouteFound) onRouteFound(summary.totalDistance, summary.totalTime);
 
                                     // AUTO-FIT TO ROUTE (Fix for Circular View)
-                                    // Use the entire route geometry to ensure no part of the path is cut off.
-                                    // Padding [50, 50] creates a ~160px safe zone inside the 260px circle.
-                                    // This pushes markers to the "corners" while keeping icons (25px radius) safe from clipping.
-                                    map.fitBounds(routes[0].coordinates, {
-                                        padding: [80, 80],
-                                        maxZoom: 16,
-                                        animate: true
-                                    });
+                                    // Only center if NOT auto-refresh
+                                    if (lastRefreshTypeRef.current !== 'AUTO') {
+                                        map.fitBounds(routes[0].coordinates, {
+                                            padding: [80, 80],
+                                            maxZoom: 16,
+                                            animate: true
+                                        });
+                                    }
                                 }
                             })
                             .addTo(map);
@@ -600,7 +606,7 @@
                 // If routing is active, we rely purely on 'routesfound' above to fit the exact path geometry.
                 const isRouting = routeStart && routeEnd && routeStart.lat && routeEnd.lat;
 
-                if (!isRouting) {
+                if (!isRouting && lastRefreshType !== 'AUTO') {
                     if (driverLocation && targetLat && targetLng) {
                         const bounds = L.latLngBounds([
                             [driverLocation.lat, driverLocation.lng],
@@ -617,7 +623,7 @@
                 }
                 // IF isRouting == true: Do nothing here. The 'routesfound' callback above will handle the camera.
                 // This prevents the map from "jumping" to the driver location and then to the route.
-            }, [targetLat, targetLng, radius, targetType, driverLocation, driverAccuracy, routeStart, routeEnd]);
+            }, [targetLat, targetLng, radius, targetType, driverLocation, driverAccuracy, routeStart, routeEnd, lastRefreshType]);
 
             return <div ref={mapRef} id={mapId} className={className || "w-full h-full"}></div>;
         };
@@ -797,7 +803,8 @@
         };
 
         // --- DRIVER VIEW COMPONENT ---
-        const DriverView = ({ pickup, drop, driverLocation, driverAccuracy, routeStats, orderStatus, actionAttempt, onAccept, onDeny, onRouteFound, onForceRefresh, isAutoRefresh, setIsAutoRefresh, retryCountdown, isSearching }) => {
+        const DriverView = ({ pickup, drop, driverLocation, driverAccuracy, routeStats, orderStatus, actionAttempt, onAccept, onDeny, onRouteFound, onForceRefresh, isAutoRefresh, setIsAutoRefresh, retryCountdown, refreshStatus }) => {
+            const isSearching = refreshStatus !== 'IDLE';
             const [maxDistance, setMaxDistance] = useState(0);
             const [showSuccessPopup, setShowSuccessPopup] = useState(false);
             const [successPopupColor, setSuccessPopupColor] = useState("green");
@@ -966,7 +973,7 @@
                         <button
                             onClick={onForceRefresh}
                             className={`p-2 rounded-full shadow-lg border border-white/10 transition-all flex items-center justify-center
-                                ${isSearching ? 'bg-amber-500 text-white animate-spin ring-2 ring-amber-400' : 'bg-gray-800 hover:bg-gray-700 text-white'}
+                                ${refreshStatus !== 'IDLE' ? (refreshStatus === 'AUTO' ? 'bg-green-500 text-white animate-spin ring-2 ring-green-400' : 'bg-amber-500 text-white animate-spin ring-2 ring-amber-400') : 'bg-gray-800 hover:bg-gray-700 text-white'}
                             `}
                             title="Force GPS Update"
                             disabled={isSearching}
@@ -1109,7 +1116,8 @@
 
         // --- ADMIN DASHBOARD (ZOMATO STYLE) ---
         // --- ADMIN DASHBOARD (ZOMATO STYLE) ---
-        const AdminDashboard = ({ pickup, drop, driverLocation, routeStats, orderStatus, onRefresh, isAutoRefresh, onToggleAutoRefresh, isSearching }) => {
+        const AdminDashboard = ({ pickup, drop, driverLocation, routeStats, orderStatus, onRefresh, isAutoRefresh, onToggleAutoRefresh, refreshStatus }) => {
+            const isSearching = refreshStatus !== 'IDLE';
             const [isExpanded, setIsExpanded] = useState(false);
 
             return (
@@ -1130,7 +1138,7 @@
 
                                 <button
                                     onClick={onRefresh}
-                                    className={`bg-white/10 hover:bg-white/20 p-2 rounded-full text-white transition-all border border-white/10 ${isSearching ? 'animate-spin bg-amber-500/50' : ''}`}
+                                    className={`bg-white/10 hover:bg-white/20 p-2 rounded-full text-white transition-all border border-white/10 ${refreshStatus !== 'IDLE' ? (refreshStatus === 'AUTO' ? 'animate-spin bg-green-500/50' : 'animate-spin bg-amber-500/50') : ''}`}
                                     title="Refresh Driver Location"
                                     disabled={isSearching}
                                 >
@@ -1237,10 +1245,11 @@
 
             // DRIVER STATE
             const [driverLocation, setDriverLocation] = useState(null);
-            const [driverSearching, setDriverSearching] = useState(false);
+            const [refreshStatus, setRefreshStatus] = useState('IDLE');
             const [driverAccuracy, setDriverAccuracy] = useState(null);
 
             // AUTO REFRESH STATE (Lifted from DriverView)
+            const [lastRefreshType, setLastRefreshType] = useState('MANUAL');
             const [isAutoRefresh, setIsAutoRefresh] = useState(false);
             const [retryCountdown, setRetryCountdown] = useState(10);
 
@@ -1349,18 +1358,19 @@
             };
 
             // Manual Check-in (Backup button) - Updated to return Promise
-            const handleManualCheckIn = () => {
-                setDriverSearching(true);
+            const handleManualCheckIn = (type = 'MANUAL') => {
+                setRefreshStatus(type);
+                setLastRefreshType(type);
                 return new Promise((resolve, reject) => {
                     navigator.geolocation.getCurrentPosition((pos) => {
                         const { latitude, longitude, accuracy } = pos.coords;
                         setDriverLocation({ lat: latitude, lng: longitude });
                         setDriverAccuracy(accuracy);
-                        setDriverSearching(false);
+                        setRefreshStatus('IDLE');
                         resolve({ lat: latitude, lng: longitude });
                     }, (err) => {
                         alert("GPS Error: " + err.message);
-                        setDriverSearching(false);
+                        setRefreshStatus('IDLE');
                         reject(err);
                     }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }); // Age 0 for fresh
                 });
@@ -1379,7 +1389,7 @@
                     interval = setInterval(() => {
                         setRetryCountdown(prev => {
                             if (prev <= 1) {
-                                handleManualCheckIn(); // Trigger refresh
+                                handleManualCheckIn('AUTO'); // Trigger refresh
                                 return 10; // Reset countdown
                             }
                             return prev - 1;
@@ -1581,6 +1591,7 @@
                             routeStart={routingFrom}
                             routeEnd={routingTo}
                             onRouteFound={(dist, time) => setRouteStats({ distance: dist, time: time })}
+                            lastRefreshType={lastRefreshType}
                         />
                     </div>
 
@@ -1595,7 +1606,7 @@
                             onRefresh={handleAdminRefresh}
                             isAutoRefresh={isAutoRefresh}
                             onToggleAutoRefresh={() => setIsAutoRefresh(!isAutoRefresh)}
-                            isSearching={driverSearching}
+                            refreshStatus={refreshStatus}
                         />
                     )}
 
@@ -1616,7 +1627,7 @@
                             isAutoRefresh={isAutoRefresh}
                             setIsAutoRefresh={setIsAutoRefresh}
                             retryCountdown={retryCountdown}
-                            isSearching={driverSearching}
+                            refreshStatus={refreshStatus}
                         />
                     )}
                 </div>
