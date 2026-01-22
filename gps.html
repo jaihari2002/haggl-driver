@@ -436,6 +436,28 @@
             const routingControlRef = useRef(null);
             // Fix: Use ref to access latest refresh type inside callbacks (stale closure prevention)
             const lastRefreshTypeRef = useRef(lastRefreshType);
+            // Animation Refs
+            const requestRef = useRef();
+            const startTimeRef = useRef();
+            const startPosRef = useRef(); // {lat, lng} for animation
+            const targetPosRef = useRef(); // {lat, lng}
+
+            // Helper: Calculate Bearing between two points
+            const getBearing = (startLat, startLng, destLat, destLng) => {
+                const startLatRad = startLat * (Math.PI / 180);
+                const startLngRad = startLng * (Math.PI / 180);
+                const destLatRad = destLat * (Math.PI / 180);
+                const destLngRad = destLng * (Math.PI / 180);
+
+                const y = Math.sin(destLngRad - startLngRad) * Math.cos(destLatRad);
+                const x = Math.cos(startLatRad) * Math.sin(destLatRad) -
+                    Math.sin(startLatRad) * Math.cos(destLatRad) * Math.cos(destLngRad - startLngRad);
+
+                let brng = Math.atan2(y, x);
+                brng = brng * (180 / Math.PI);
+                return (brng + 360) % 360;
+            };
+
             const mapId = id || "map-container";
 
             useEffect(() => {
@@ -475,7 +497,6 @@
                     // Determine Colors based on Type
                     const isPickup = targetType === 'pickup';
                     const mainColor = isPickup ? '#22c55e' : (targetType === 'drop' ? '#ef4444' : '#6366f1'); // Green, Red, or Indigo
-                    const fillColor = isPickup ? '#4ade80' : (targetType === 'drop' ? '#f87171' : '#818cf8');
 
                     const targetIcon = L.divIcon({
                         className: 'custom-div-icon',
@@ -496,47 +517,8 @@
 
                 // --- 2. Driver Marker & Accuracy (Real Driver position) ---
                 if (driverLocation) {
-                    if (markersRef.current.driver) map.removeLayer(markersRef.current.driver);
+                    // Accuracy Circle (Simple Replacement)
                     if (markersRef.current.accuracyCircle) map.removeLayer(markersRef.current.accuracyCircle);
-
-                    const driverIcon = L.divIcon({
-                        className: 'custom-div-icon',
-                        html: `<div style="position:relative; width:50px; height:50px;">
-                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" style="width:100%; height:100%; filter: drop-shadow(0 5px 8px rgba(0,0,0,0.4)); transform: rotate(180deg);">
-                                    {/* Wheels */}
-                                    <rect x="10" y="20" width="12" height="24" rx="4" fill="#333" />
-                                    <rect x="78" y="20" width="12" height="24" rx="4" fill="#333" />
-                                    <rect x="10" y="65" width="12" height="24" rx="4" fill="#333" />
-                                    <rect x="78" y="65" width="12" height="24" rx="4" fill="#333" />
-                                    
-                                    {/* Chassis shadow */}
-                                    <rect x="22" y="15" width="56" height="80" rx="4" fill="rgba(0,0,0,0.2)" />
-
-                                    {/* Cargo Container (More detailed/Fun) */}
-                                    <rect x="20" y="40" width="60" height="55" rx="6" fill="#f87171" stroke="#b91c1c" strokeWidth="2" />
-                                    <path d="M20 40h60v20H20z" fill="#ef4444" />
-                                    
-                                    {/* Haggl Logo on Cargo */}
-                                    <image href="./haggl-logo.png" x="25" y="45" width="50" height="45" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
-                                    
-                                    {/* Cab */}
-                                    <path d="M22 40V20a8 8 0 0 1 8-8h40a8 8 0 0 1 8 8v20H22z" fill="#ef4444" stroke="#b91c1c" strokeWidth="2" />
-                                    
-                                    {/* Windshield & Roof */}
-                                    <path d="M28 15h44v12H28z" fill="#3b82f6" opacity="0.8" />
-                                    <path d="M30 15v-2a2 2 0 0 1 2-2h36a2 2 0 0 1 2 2v2" fill="#ef4444" />
-                                    
-                                    {/* Lights */}
-                                    <circle cx="26" cy="40" r="3" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
-                                    <circle cx="74" cy="40" r="3" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
-                                 </svg>
-                               </div>`,
-                        iconSize: [50, 50], iconAnchor: [25, 25]
-                    });
-
-                    markersRef.current.driver = L.marker([driverLocation.lat, driverLocation.lng], { icon: driverIcon }).addTo(map);
-
-                    // Add Accuracy Circle
                     if (driverAccuracy) {
                         markersRef.current.accuracyCircle = L.circle([driverLocation.lat, driverLocation.lng], {
                             color: '#F59E0B',
@@ -546,6 +528,101 @@
                             dashArray: '4, 4',
                             radius: driverAccuracy
                         }).addTo(map);
+                    }
+
+                    // --- SMOOTH MARKER LOGIC ---
+                    if (!markersRef.current.driver) {
+                        // INITIAL CREATION
+                        const driverIcon = L.divIcon({
+                            className: 'custom-div-icon',
+                            html: `<div class="lorry-icon-wrapper" style="position:relative; width:40px; height:80px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); transition: transform 0.3s ease-out;">
+                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200" fill="none" style="width:100%; height:100%;">
+                                        {/* Chassis */}
+                                        <rect x="30" y="20" width="40" height="170" rx="4" fill="#333" />
+                                        
+                                        {/* Wheels - Front */}
+                                        <rect x="8" y="30" width="14" height="26" rx="4" fill="#1a1a1a" />
+                                        <rect x="78" y="30" width="14" height="26" rx="4" fill="#1a1a1a" />
+                                        
+                                        {/* Wheels - Rear */}
+                                        <rect x="8" y="140" width="14" height="26" rx="4" fill="#1a1a1a" />
+                                        <rect x="78" y="140" width="14" height="26" rx="4" fill="#1a1a1a" />
+                                        <rect x="8" y="170" width="14" height="26" rx="4" fill="#1a1a1a" />
+                                        <rect x="78" y="170" width="14" height="26" rx="4" fill="#1a1a1a" />
+                                        
+                                        {/* Trailer */}
+                                        <rect x="15" y="60" width="70" height="135" rx="3" fill="#f8fafc" stroke="#64748b" strokeWidth="2" />
+                                        <line x1="15" y1="100" x2="85" y2="100" stroke="#e2e8f0" strokeWidth="2" />
+                                        <line x1="15" y1="145" x2="85" y2="145" stroke="#e2e8f0" strokeWidth="2" />
+                                        
+                                        {/* Logo on Trailer - Rotated */}
+                                        <image href="./haggl-logo.png" x="-15" y="97" width="130" height="60" transform="rotate(-90 50 127)" preserveAspectRatio="xMidYMid contain" opacity="0.9" />
+
+                                        {/* Cab Body */}
+                                        <path d="M20 50V20a8 8 0 0 1 8-8h44a8 8 0 0 1 8 8v30H20z" fill="#FFCC00" stroke="#b45309" strokeWidth="2" />
+                                        <path d="M24 16h52v12H24z" fill="#3b82f6" opacity="0.8" />
+                                        
+                                        {/* Mirrors */}
+                                        <rect x="10" y="18" width="6" height="14" rx="2" fill="#fbbf24" stroke="#b45309" />
+                                        <rect x="84" y="18" width="6" height="14" rx="2" fill="#fbbf24" stroke="#b45309" />
+                                     </svg>
+                                   </div>`,
+                            iconSize: [40, 80], iconAnchor: [20, 40]
+                        });
+
+                        markersRef.current.driver = L.marker([driverLocation.lat, driverLocation.lng], { icon: driverIcon }).addTo(map);
+                        startPosRef.current = driverLocation; // Initial position
+                    } else {
+                        // SMOOTH ANIMATION UPDATE
+                        const marker = markersRef.current.driver;
+                        const start = { lat: marker.getLatLng().lat, lng: marker.getLatLng().lng };
+                        const end = driverLocation;
+
+                        // Only animate if distance is meaningful (> 1 meter)
+                        const R = 6371e3;
+                        const dLat = (end.lat - start.lat) * Math.PI / 180;
+                        const dLon = (end.lng - start.lng) * Math.PI / 180;
+                        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                            Math.cos(start.lat * Math.PI / 180) * Math.cos(end.lat * Math.PI / 180) *
+                            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                        const dist = R * c;
+
+                        if (dist > 1) {
+                            if (requestRef.current) cancelAnimationFrame(requestRef.current);
+
+                            const duration = 2000; // 2 seconds slide
+                            startTimeRef.current = null;
+
+                            const animate = (time) => {
+                                if (!startTimeRef.current) startTimeRef.current = time;
+                                const progress = Math.min((time - startTimeRef.current) / duration, 1);
+
+                                // Linear Interpolation
+                                const curLat = start.lat + (end.lat - start.lat) * progress;
+                                const curLng = start.lng + (end.lng - start.lng) * progress;
+
+                                marker.setLatLng([curLat, curLng]);
+
+                                // Calculate Bearing and Rotate
+                                const bearing = getBearing(start.lat, start.lng, end.lat, end.lng);
+                                const el = marker.getElement();
+                                if (el) {
+                                    const inner = el.querySelector('.lorry-icon-wrapper');
+                                    // Default SVG is pointing UP, so rotate directly to bearing
+                                    if (inner) inner.style.transform = `rotate(${bearing}deg)`;
+                                }
+
+                                if (progress < 1) {
+                                    requestRef.current = requestAnimationFrame(animate);
+                                } else {
+                                    // Snap to end
+                                    marker.setLatLng([end.lat, end.lng]);
+                                }
+                            };
+
+                            requestRef.current = requestAnimationFrame(animate);
+                        }
                     }
                 }
 
